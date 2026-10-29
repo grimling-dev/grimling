@@ -1,18 +1,22 @@
+<meta charset="utf-8">
 <title>Grimling</title>
 <meta name="description" content="Grimling: a pane of pixel-art agents beside your Claude Code chat. Launch, message and read subagents without leaving the terminal.">
 <link rel="stylesheet" href="vendor/fonts/fonts.css">
 <script>
 /* Seasonal layer switch. Everything Halloween hangs off the `halloween` class on <html>:
-   on from Oct 15 to Nov 2 (local date); ?halloween=1 or ?halloween=0 forces it for previews. */
+   on from Oct 15 to Nov 2 (local date); ?halloween=1 or ?halloween=0 forces it for previews.
+   Halloween day itself (Oct 31) also adds `halloween-night`; ?halloween=day forces that, ?halloween=0 turns all off. */
 (function () {
-  var on = false;
+  var on = false, night = false;
   try {
     var d = new Date(), m = d.getMonth(), n = d.getDate();
     on = (m === 9 && n >= 15) || (m === 10 && n <= 2);
+    night = m === 9 && n === 31;
     var q = new URLSearchParams(location.search).get('halloween');
-    if (q === '1') on = true; else if (q === '0') on = false;
+    if (q === 'day') on = night = true; else if (q === '1') on = true; else if (q === '0') on = night = false;
   } catch (e) {}
   if (on) document.documentElement.classList.add('halloween');
+  if (on && night) document.documentElement.classList.add('halloween-night');
 })();
 </script>
 <style>
@@ -192,6 +196,28 @@ td:first-child { white-space: nowrap; }
 .lane h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .lane h3 small { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-weight: 400; }
 .lane ul { margin: 0; padding-left: 1.1em; color: var(--muted); display: grid; gap: 6px; }
+/* Sealed entries (the Later lane): the text is blurred like a page seen through smoke and comes clear on hover,
+   tap or keyboard focus. Only `filter` and `opacity` change, so screen readers always get the full text, and
+   reduced motion, forced colors and print show it plain. Pure CSS: nothing depends on the script. */
+.lane .hint { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin: -4px 0 0; }
+.lane ul.sealed { list-style: none; padding-left: 0; gap: 8px; }
+.sealed li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; padding: 6px 8px; margin-inline: -8px;
+  border-radius: 6px; cursor: default; outline: none; transition: background-color 0.3s; }
+.sealed .sigil { width: 14px; height: 14px; margin-top: 0.3em; color: var(--plum); opacity: 0.75; transition: opacity 0.3s, transform 0.6s; }
+.sealed .sigil svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.sealed .seal-text { filter: blur(3.5px); opacity: 0.7; transition: filter 0.45s ease, opacity 0.45s ease; overflow-wrap: anywhere; }
+.sealed li:hover, .sealed li:focus-visible, .sealed li:focus { background: color-mix(in srgb, var(--plum) 8%, transparent); }
+.sealed li:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.sealed li:hover .seal-text, .sealed li:focus .seal-text { filter: none; opacity: 1; }
+.sealed li:hover .sigil, .sealed li:focus .sigil { opacity: 1; transform: rotate(180deg); }
+.rm-hw { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sealed .seal-text { filter: none; opacity: 1; transition: none; }
+  .sealed .sigil { transition: none; }
+  .sealed li:hover .sigil, .sealed li:focus .sigil { transform: none; }
+}
+@media (forced-colors: active) { .sealed .seal-text { filter: none; opacity: 1; animation: none !important; } }
+@media print { .sealed .seal-text { filter: none; opacity: 1; animation: none !important; } .lane .hint, .rm-hw { display: none !important; } }
 
 /* FAQ */
 details { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 72ch; }
@@ -258,10 +284,99 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
   78% { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--pumpkin) 26%, transparent)); }
 }
 @media (max-width: 560px) { .hw-web { width: 96px; height: 96px; } }
+/* Roadmap after dark: fog drifting behind the lanes, a lantern flickering over Next, a cobweb in the corner,
+   pumpkin sigils and a slow spectral pulse on the sealed entries. */
+html.halloween #roadmap { position: relative; overflow: hidden; overflow: clip; }
+html.halloween #roadmap > .wrap { position: relative; z-index: 1; }
+html.halloween #roadmap::before { content: ""; position: absolute; left: 0; top: 18%; bottom: 0; width: 200%; z-index: 0; pointer-events: none;
+  background-repeat: repeat-x; background-size: 50% 100%;
+  background-image: radial-gradient(ellipse 20% 40% at 15% 60%, var(--fog), transparent 70%), radial-gradient(ellipse 24% 35% at 45% 80%, var(--fog), transparent 70%),
+    radial-gradient(ellipse 18% 45% at 75% 65%, var(--fog), transparent 70%), radial-gradient(ellipse 14% 30% at 92% 85%, var(--fog), transparent 70%);
+  animation: hw-fog 90s linear infinite; }
+html.halloween .rm-web { display: block; position: absolute; top: 0; right: 0; width: 120px; height: 120px; pointer-events: none; z-index: 0; color: var(--muted); opacity: 0.4; }
+html.halloween .rm-lantern { display: inline-block; width: 12px; height: 16px; margin-left: 8px; vertical-align: -1px; }
+html.halloween .lane-next { --c: var(--pumpkin); position: relative; }
+html.halloween .lane-next::before { content: ""; position: absolute; inset: -6px -12px auto; height: 150px; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 65% 70% at 30% 0%, color-mix(in srgb, var(--pumpkin) 20%, transparent), transparent 72%);
+  animation: rm-flicker 3.7s steps(1) infinite; }
+@keyframes rm-flicker { 0%, 100% { opacity: 1; } 23% { opacity: 0.72; } 27% { opacity: 0.95; } 52% { opacity: 0.8; } 55% { opacity: 1; } 81% { opacity: 0.66; } 84% { opacity: 0.92; } }
+html.halloween .rm-lantern .frame { fill: var(--muted); }
+html.halloween .rm-lantern .glass { fill: color-mix(in srgb, var(--pumpkin) 25%, transparent); }
+html.halloween .rm-lantern .outer { fill: var(--pumpkin); }
+html.halloween .rm-lantern .core { fill: var(--amber); }
+html.halloween .rm-lantern .flame { animation: rm-flicker 2.3s steps(1) infinite; }
+html.halloween .sealed .sigil { color: var(--pumpkin); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--pumpkin) 55%, transparent)); }
+html.halloween .sealed .seal-text { animation: rm-spectral 7s ease-in-out infinite; }
+html.halloween .sealed li:nth-child(2) .seal-text { animation-delay: -1.4s; }
+html.halloween .sealed li:nth-child(3) .seal-text { animation-delay: -2.8s; }
+html.halloween .sealed li:nth-child(4) .seal-text { animation-delay: -4.2s; }
+html.halloween .sealed li:nth-child(5) .seal-text { animation-delay: -5.6s; }
+html.halloween .sealed li:hover .seal-text, html.halloween .sealed li:focus .seal-text { animation: none; }
+@keyframes rm-spectral { 0%, 100% { opacity: 0.6; text-shadow: none; } 50% { opacity: 0.85; text-shadow: 0 0 8px color-mix(in srgb, var(--pumpkin) 60%, transparent); } }
+@media (max-width: 560px) { html.halloween .rm-web { width: 80px; height: 80px; } }
+@media (prefers-reduced-motion: reduce) {
+  html.halloween #roadmap::before, html.halloween .lane-next::before, html.halloween .rm-lantern .flame, html.halloween .sealed .seal-text { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .hw-fog span, .hw-web .spider { animation: none; }
   html.halloween .hero h1 { animation: none; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--pumpkin) 30%, transparent)); }
   html.halloween .hero h1 span { color: var(--pumpkin); background: none; }
+}
+/* Halloween night (Oct 31, or ?halloween=day): the whole page goes to night whatever the OS theme, with moonlight,
+   a vignette, low fog, a bigger glowing Grim, soul wisps and Grim's cauldron (a toy counter; see the script). */
+html.halloween-night:root {
+  --bg: #0b0910; --surface: #14111c; --sunk: #08070c; --ink: #ece8f5; --muted: #a8a1bd; --line: #262033;
+  --teal: #2ec4b6; --amber: #ffd23f; --plum: #b48cff; --term-bg: #0a0810; --term-ink: #e9e5f3; --term-dim: #8f88a6;
+  --pumpkin: #ff8c42; --bat: #6b5c96; --fog: rgba(214, 205, 240, 0.12); --brew: #7ae582;
+  color-scheme: dark;
+}
+html.halloween-night body { background: radial-gradient(ellipse 70% 45% at 82% -8%, rgba(205, 215, 255, 0.09), transparent 70%) fixed, var(--bg); }
+html.halloween-night body::after { content: ""; position: fixed; inset: 0; z-index: 4; pointer-events: none;
+  background: radial-gradient(ellipse 125% 95% at 50% 45%, transparent 62%, rgba(0, 0, 0, 0.36)); }
+html.halloween-night .hero::before { content: ""; position: absolute; top: 30px; right: 24%; width: 54px; height: 54px; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle at 36% 34%, #fffbea, #e9e2c6 58%, #cbc2a0);
+  box-shadow: 0 0 36px 10px rgba(255, 248, 220, 0.16), 0 0 120px 40px rgba(200, 210, 255, 0.07); }
+.hw-fog.hw-nightfog { position: fixed; height: 24vh; z-index: 3; }
+html.halloween-night .hello { position: relative; }
+html.halloween-night .hello::before { content: ""; position: absolute; left: -24px; bottom: -24px; width: 160px; height: 160px; z-index: -1; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pumpkin) 26%, transparent), transparent 66%); animation: rm-flicker 3.3s steps(1) infinite; }
+html.halloween-night .hello canvas { width: 112px; height: 112px; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--pumpkin) 70%, transparent)) drop-shadow(0 0 18px color-mix(in srgb, var(--pumpkin) 35%, transparent)); }
+html.halloween-night .hello canvas:focus-visible { outline: 2px solid var(--amber); outline-offset: 4px; border-radius: 6px; }
+.cauldron { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; min-width: 0; }
+.cauldron .pot { position: relative; flex: none; width: 66px; height: 58px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 8px; color: inherit; }
+.cauldron .pot canvas { display: block; width: 56px; height: 44px; margin: 12px auto 0; image-rendering: pixelated; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--brew) 40%, transparent)); }
+.cauldron .pot:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.cauldron .bubbles i { position: absolute; bottom: 42px; width: 6px; height: 6px; border-radius: 50%; background: var(--brew); opacity: 0; animation: brew-bubble 2.4s ease-in infinite; }
+.cauldron .bubbles i:nth-child(1) { left: 20px; }
+.cauldron .bubbles i:nth-child(2) { left: 31px; width: 4px; height: 4px; animation-delay: 0.8s; }
+.cauldron .bubbles i:nth-child(3) { left: 40px; animation-delay: 1.6s; }
+@keyframes brew-bubble { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 20% { opacity: 0.9; } 100% { transform: translateY(-20px) scale(1.1); opacity: 0; } }
+.cauldron .pot.boil canvas { animation: brew-boil 0.5s steps(4) 1; }
+@keyframes brew-boil { 25% { transform: translateY(-2px) rotate(-3deg); } 75% { transform: translateY(-1px) rotate(3deg); } }
+.cauldron .splash { position: absolute; left: 50%; top: 0; font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--brew); white-space: nowrap; pointer-events: none;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--brew) 60%, transparent); animation: brew-splash 1.1s ease-out forwards; }
+@keyframes brew-splash { 0% { opacity: 0; transform: translate(-50%, 8px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -34px); } }
+.potinfo { display: grid; gap: 2px; min-width: 0; }
+.potinfo b { font-family: var(--mono); font-size: 0.95rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.potinfo .potn { color: var(--brew); }
+.potinfo small { font-size: 0.75rem; color: var(--muted); line-height: 1.35; max-width: 46ch; }
+.wisp { position: absolute; z-index: 2; width: 26px; height: 34px; margin: -17px 0 0 -13px; padding: 0; border: 0; background: none; cursor: pointer;
+  animation: wisp-float 10s ease-in-out forwards; }
+.wisp::before { content: ""; position: absolute; inset: 0; border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+  background: radial-gradient(circle at 50% 38%, #fff 0 14%, rgba(191, 233, 255, 0.85) 30%, rgba(140, 200, 255, 0.25) 58%, transparent 72%); animation: wisp-flick 1.4s steps(2) infinite; }
+.wisp::after { content: ""; position: absolute; left: 50%; top: 62%; width: 6px; height: 16px; margin-left: -3px; border-radius: 50%; background: linear-gradient(rgba(191, 233, 255, 0.5), transparent); }
+.wisp.popped { animation-play-state: paused; pointer-events: none; }
+.wisp.popped::before, .wisp.popped::after { animation: wisp-pop 0.45s ease-out forwards; }
+@keyframes wisp-float { 0% { opacity: 0; transform: translate(0, 0); } 12% { opacity: 0.9; } 50% { transform: translate(14px, -60px); } 88% { opacity: 0.8; } 100% { opacity: 0; transform: translate(-8px, -130px); } }
+@keyframes wisp-flick { 50% { opacity: 0.75; } }
+@keyframes wisp-pop { to { opacity: 0; transform: scale(2.2); } }
+@media (max-width: 560px) {
+  html.halloween-night .hero::before { top: 14px; right: 30%; width: 36px; height: 36px; }
+  html.halloween-night .hello canvas { width: 96px; height: 96px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.halloween-night .hello::before, .cauldron .bubbles i, .cauldron .pot.boil canvas, .hw-fog.hw-nightfog span { animation: none; }
+  .wisp { display: none; }
 }
 </style>
 
@@ -539,23 +654,24 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
       </div>
       <div class="log">
         <!-- sync-site:changelog -->
-        <div class="entry"><div class="when"><b>v0.1.0</b>2026-10-29</div><div><strong>First public release.</strong><ul><li><em>Added:</em> <strong>Pane and tabs.</strong> <code>/grimling</code> opens a pane built for a narrow docked column (about 44 columns) with Deck, Flow, Table, Mermaid and Keys tabs.</li><li><em>Added:</em> <strong>The Grimoire.</strong> A filterable grid of pixel-art agent cards: the built-in agent types, every agent file in <code>~/.claude/agents</code> and in the project's <code>.claude/agents</code> (a project file wins over a user file of the same name), and Swarm, which fills a workflow request into your prompt instead of launching anything.</li><li><em>Added:</em> <strong>Launch in one line.</strong> Pick a card, type the task, press Enter.</li><li><em>Added:</em> <strong>Live agent cards.</strong> Running agents get their own cards; send a message to a running agent, read a finished agent's answer, copy it or add it after your prompt draft.</li><li><em>Added:</em> <strong>Stop button.</strong> Stops an agent launched from the deck, only after you confirm it in Claude Code's permission prompt.</li><li><em>Added:</em> <strong>Flow and Table views</strong> of the agents in the session, and a Mermaid tab that copies the agent graph.</li><li><em>Added:</em> <strong>Grim, the mascot.</strong> A small reaper pops up with a speech bubble when an agent finishes, fails or is stopped.</li><li><em>Added:</em> <strong>Meter.</strong> Your status line as bars: context window, plan limits with their reset times, cost, session time and model.</li><li><em>Added:</em> <strong>Arena lite.</strong> Pit two cards against each other on a question with a known answer; both run on a small model and are scored by correctness, then speed, then tokens.</li><li><em>Added:</em> <strong>Run log and the agent-dex skill.</strong> Launches, answers and scored fights are logged on your computer in <code>~/.claude/grimling/runs/</code>, one file a day, redacted by default (modes: redacted, full, meta, off).</li><li><em>Added:</em> <strong>Settings file.</strong> Optional <code>~/.claude/grimling/settings.json</code> with a default for every key and a JSON schema for editor autocomplete.</li><li><em>Added:</em> <strong>Feedback.</strong> <code>/grimling-feedback</code> previews exactly what would be sent (no paths, prompts or answers) and opens a pre-filled GitHub issue or discussion in your browser.</li><li><em>Known limitations:</em> <strong>macOS is untested.</strong> The test suite passes on Windows and Linux; nobody has run Grimling on macOS yet.</li></ul></div></div>
+        <div class="entry"><div class="when"><b>v0.1.0</b>2026-10-29</div><div><strong>First public release.</strong><ul><li><em>Added:</em> <strong>Pane and tabs.</strong> <code>/grimling</code> opens a pane built for a narrow docked column (about 44 columns) with Deck, Flow, Table, Mermaid and Keys tabs.</li><li><em>Added:</em> <strong>The Grimoire.</strong> A filterable grid of pixel-art agent cards: the built-in agent types, every agent file in <code>~/.claude/agents</code> and in the project's <code>.claude/agents</code> (a project file wins over a user file of the same name), and Swarm, which fills a workflow request into your prompt instead of launching anything.</li><li><em>Added:</em> <strong>Launch in one line.</strong> Pick a card, type the task, press Enter.</li><li><em>Added:</em> <strong>Live agent cards.</strong> Running agents get their own cards; send a message to a running agent, read a finished agent's answer, copy it or add it after your prompt draft.</li><li><em>Added:</em> <strong>Stop button.</strong> Stops an agent launched from the deck, only after you confirm it in Claude Code's permission prompt.</li><li><em>Added:</em> <strong>Flow and Table views</strong> of the agents in the session, and a Mermaid tab that copies the agent graph.</li><li><em>Added:</em> <strong>Grim, the mascot.</strong> A small reaper pops up with a speech bubble when an agent finishes, fails or is stopped.</li><li><em>Added:</em> <strong>Meter.</strong> Your status line as bars: context window, plan limits with their reset times, cost, session time and model.</li><li><em>Added:</em> <strong>Arena lite.</strong> Pit two cards against each other on a question with a known answer; both run on a small model and are scored by correctness, then speed, then tokens.</li><li><em>Added:</em> <strong>Run log and the agent-dex skill.</strong> Launches, answers and scored fights are logged on your computer in <code>~/.claude/grimling/runs/</code>, one file a day, redacted by default (modes: redacted, full, meta, off).</li><li><em>Added:</em> <strong>Settings file.</strong> Optional <code>~/.claude/grimling/settings.json</code> with a default for every key and a JSON schema for editor autocomplete.</li><li><em>Added:</em> <strong>Feedback.</strong> <code>/grimling-feedback</code> previews exactly what would be sent (no paths, prompts or answers) and opens a pre-filled GitHub issue or discussion in your browser.</li><li><em>Known limitations:</em> <strong>macOS is not yet tried live.</strong> The test suite passes on Windows, Linux and macOS in CI; nobody has run Grimling on a Mac yet.</li></ul></div></div>
         <!-- /sync-site:changelog -->
       </div>
     </div>
   </section>
 
   <section class="band" id="roadmap">
+    <svg class="rm-hw rm-web" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="1"><path d="M120 0 40 0M120 0 120 80M120 0 58 34M120 0 86 62M120 0 70 12M120 0 104 50"/><path d="M100 0Q104 10 112 14Q114 16 120 18"/><path d="M80 0Q86 16 98 24Q106 30 120 36"/><path d="M60 0Q68 22 84 34Q98 46 120 54"/><path d="M44 0Q52 28 72 44Q92 62 120 72"/></g></svg>
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Roadmap</span>
         <h2>What comes next</h2>
-        <p>Order can change. Each step ships when it is tested.</p>
+        <p>Order can change. Each step ships when it is tested. Some things are still in the crypt.</p>
       </div>
       <div class="lanes">
-        <div class="lane" style="--c: var(--teal)"><h3>Now <small>v0.1.0</small></h3><ul><li>Early access on Windows and Linux</li><li>Your feedback through <code>/grimling-feedback</code></li></ul></div>
-        <div class="lane" style="--c: var(--amber)"><h3>Next <small>soon</small></h3><ul><li>A short demo video</li><li>More agent packs</li><li>Tested on macOS</li><li>Arena tuning: harder puzzles, a finer tie-break</li></ul></div>
-        <div class="lane" style="--c: var(--plum)"><h3>Later <small>after release</small></h3><ul><li>A prompt library with <code>@</code> shortcuts</li><li>Save Mermaid diagrams to reopen later</li><li>A "needs you" queue and custom notifications</li><li>Per-agent cost bars; one pane for every terminal</li></ul></div>
+        <div class="lane" style="--c: var(--teal)"><h3>Now <small>v0.1.0 early access</small></h3><ul><li>Tests pass on Windows, Linux and macOS in CI</li><li>A setup guide for GPU swarms: <code>docs/GPU-SWARMS.md</code></li><li>Your feedback through <code>/grimling-feedback</code></li></ul></div>
+        <div class="lane lane-next" style="--c: var(--amber)"><h3><span>Next<svg class="rm-hw rm-lantern" viewBox="0 0 12 16" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><rect x="4" y="0" width="4" height="1" class="frame"/><rect x="2" y="2" width="8" height="1" class="frame"/><rect x="2" y="13" width="8" height="2" class="frame"/><rect x="2" y="3" width="1" height="10" class="frame"/><rect x="9" y="3" width="1" height="10" class="frame"/><rect x="3" y="3" width="6" height="10" class="glass"/><g class="flame"><rect x="5" y="6" width="2" height="5" class="outer"/><rect x="5" y="8" width="2" height="2" class="core"/></g></svg></span> <small>soon</small></h3><ul><li>A short demo video</li><li>More agent packs</li><li>Grimling tried live on macOS</li><li>Arena tuning: harder puzzles, a finer tie-break</li></ul></div>
+        <div class="lane" style="--c: var(--plum)"><h3>Later <small>sealed</small></h3><p class="hint">Hover, tap or tab to unseal.</p><ul class="sealed"><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1.2 11 10.4H1Z"/><circle cx="6" cy="7.2" r="1.3"/></svg></span><span class="seal-text">A prompt library with <code>@</code> shortcuts</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M8.2 1.4a4.6 4.6 0 1 0 0 9.2 3.6 3.6 0 1 1 0-9.2Z"/></svg></span><span class="seal-text">Save Mermaid diagrams to reopen later</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3 1v10M3 3.2l5 2.8-5 2.8M9.2 1v10"/></svg></span><span class="seal-text">A &ldquo;needs you&rdquo; queue for agents waiting on you, and richer notification rules</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10M2.6 2.6l6.8 6.8M9.4 2.6l-6.8 6.8"/></svg></span><span class="seal-text">Per-agent cost bars</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2 1.2h8L2 10.8h8Z"/></svg></span><span class="seal-text">One pane for every terminal</span></li></ul></div>
       </div>
     </div>
   </section>
@@ -566,7 +682,7 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
       <details><summary>Does Grimling change what my agents can do?</summary><p>No. It uses the same agent types and permissions your Claude Code session already has. It only gives them a place to be seen and talked to.</p></details>
       <details><summary>Does it cost anything to run?</summary><p>The pane itself costs nothing. Agents you launch use your Claude plan the same way they would from the prompt, and the meter shows how much you have used.</p></details>
       <details><summary>Can I add my own agents?</summary><p>Yes. Any agent file in your user or project agents folder gets a card. Set its art, short name and category in <code>dex.json</code>, or let the <code>agent-dex</code> skill propose one.</p></details>
-      <details><summary>Will it work in my terminal?</summary><p>It is built on Windows Terminal, and its test suite also passes on Linux. macOS is untested at the moment: it should work, and an issue with what you see helps.</p></details>
+      <details><summary>Will it work in my terminal?</summary><p>Its tests pass on Windows, Linux and macOS in CI, and it is built and used daily in Windows Terminal. Nobody has tried it live on macOS yet, so reports from Mac users are welcome: <code>/grimling-feedback</code> or an issue.</p></details>
       <details><summary>Is this made by Anthropic?</summary><p>No. Grimling is an unofficial community mod for Claude Code, not affiliated with Anthropic.</p></details>
     </div>
   </section>
@@ -613,6 +729,8 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
   // Grim: an original 12x12 mascot (a little hooded reaper with a scythe and ember eyes), four frames.
   const GRIM_PAL = { R: '#3d3358', r: '#5c4f84', w: '#ece6d6', k: '#0f0c15', o: '#ff8c42', y: '#ffd23f', S: '#cfd6de', b: '#8a5a2b' };
   const HALLOWEEN = document.documentElement.classList.contains('halloween');
+  const NIGHT = HALLOWEEN && document.documentElement.classList.contains('halloween-night');
+  let reapSoul = null;
   // In the Halloween season Grim carries a lit jack-o'-lantern beside the scythe (rows 7-10, right edge).
   if (HALLOWEEN) Object.assign(GRIM_PAL, { g: '#43aa8b', O: '#d9601a' });
   const GRIM = HALLOWEEN
@@ -648,8 +766,8 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
   const hop = el => { el.classList.remove('hop'); void el.offsetWidth; el.classList.add('hop'); };
   const TIPS = ['Esc always hands the keyboard back to the prompt.', 'Press / in the Grimoire to filter by name.', 'Enter on a finished agent opens its answer.', 'Swarm cards never launch on their own.', 'Run /grimling-tour for the full walk-through.'];
   let tip = 0;
-  grimEl.addEventListener('click', () => { hop(grimEl); waveUntil = performance.now() + 1200; grimsay.textContent = TIPS[tip++ % TIPS.length]; });
-  palgrim.addEventListener('click', () => { hop(palgrim); palsay.textContent = TIPS[tip++ % TIPS.length]; });
+  grimEl.addEventListener('click', () => { hop(grimEl); waveUntil = performance.now() + 1200; if (reapSoul) reapSoul(false); else grimsay.textContent = TIPS[tip++ % TIPS.length]; });
+  palgrim.addEventListener('click', () => { hop(palgrim); if (reapSoul) palsay.textContent = reapSoul(false); else palsay.textContent = TIPS[tip++ % TIPS.length]; });
 
   // The companion follows you down the page and comments on each section.
   const LINES = {
@@ -670,6 +788,74 @@ html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
     const lead = badge && [...badge.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
     if (lead) lead.textContent = 'Happy Halloween · ' + lead.textContent;
     decorateHero(document.querySelector('.hero'));
+  }
+
+  // Halloween night (Oct 31 only): Grim's cauldron. It is a toy, not a statistic: it starts from a fixed seed of
+  // 5 billion (about what Grim's maker has burned lately), each click adds a random handful, and only this
+  // visitor's own additions are kept, in this browser. Nothing is sent anywhere.
+  if (NIGHT) reapSoul = startCauldron();
+  function startCauldron() {
+    const hello = document.querySelector('.hero .hello'); if (!hello) return null;
+    const SEED = 5e9, KEY = 'grimling-cauldron-added';
+    let added = 0;
+    try { added = Math.max(0, Math.floor(Number(localStorage.getItem(KEY)) || 0)); } catch (e) {}
+    const box = document.createElement('div'); box.className = 'cauldron';
+    box.innerHTML = '<button type="button" class="pot" aria-label="Grim\'s cauldron: reap a soul into it" aria-describedby="potcap">' +
+      '<span class="bubbles" aria-hidden="true"><i></i><i></i><i></i></span><canvas width="14" height="11" aria-hidden="true"></canvas></button>' +
+      '<div class="potinfo"><b aria-live="polite" aria-atomic="true"><span class="potn"></span> tokens in the pot</b>' +
+      '<small id="potcap">Grim\'s cauldron · just for Halloween · seeded with ~5 billion tokens, about what his maker has burned lately. A toy: click Grim, the pot or a passing soul.</small></div>';
+    hello.after(box);
+    const pot = box.querySelector('.pot'), potn = box.querySelector('.potn');
+    const POT_PAL = { k: '#0f0c15', K: '#2a2140', h: '#4a3f6b', g: '#7ae582', G: '#43aa8b', o: '#ff8c42', y: '#ffd23f' };
+    const POT = ['.kkkkkkkkkkkk.', 'kgGgggGggGgggk', '.kKKKKKKKKKKk.', 'kKhKKKKKKKKKKk', 'kKhKKKKKKKKKKk', 'kKKKKKKKKKKKKk', '.kKKKKKKKKKKk.', '..kKKKKKKKKk..', '..kk......kk..', '...o.oy.yo.o..', '..oyoyoyoyoyo.'];
+    const pctx = box.querySelector('canvas').getContext('2d');
+    if (pctx) POT.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '.') return; pctx.fillStyle = POT_PAL[ch]; pctx.fillRect(x, y, 1, 1); }));
+    const fmtAdd = n => n < 1000 ? String(n) : (n / 1000).toFixed(1) + 'k';
+    const show = () => { potn.textContent = (SEED + added).toLocaleString('en-US'); };
+    show();
+    const QUIPS = ['Into the pot it goes.', 'Another soul for the brew.', 'Mmm. Crunchy tokens.', 'The cauldron hungers.', 'Stir, stir, cackle.', 'Boo. That one was fresh.', 'Careful, the brew bites back.'];
+    let q = 0;
+    function reapOne(big) {
+      const add = Math.round(((big ? 1.6 : 0.6) + Math.random() * (big ? 1.8 : 1.2)) * 10) * 100;
+      added += add; show();
+      try { localStorage.setItem(KEY, String(added)); } catch (e) {}
+      const quip = QUIPS[q++ % QUIPS.length] + ' +' + fmtAdd(add);
+      grimsay.textContent = quip;
+      if (!reduceMotion()) {
+        const sp = document.createElement('span'); sp.className = 'splash'; sp.setAttribute('aria-hidden', 'true'); sp.textContent = '+' + fmtAdd(add);
+        sp.addEventListener('animationend', () => sp.remove()); pot.append(sp);
+        pot.classList.remove('boil'); void pot.offsetWidth; pot.classList.add('boil');
+      }
+      return quip;
+    }
+    pot.addEventListener('click', () => { reapOne(false); hop(grimEl); });
+    grimEl.tabIndex = 0; grimEl.setAttribute('role', 'button');
+    grimEl.setAttribute('aria-label', 'Grim, the Grimling mascot. Press to reap a soul into his cauldron');
+    grimEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); grimEl.click(); } });
+    grimsay.textContent = "It's Halloween night. Click me, my cauldron or a passing soul to feed the pot.";
+    palsay.textContent = 'Halloween night. Click me to feed the cauldron.';
+    const fog = document.createElement('div'); fog.className = 'hw-fog hw-nightfog'; fog.setAttribute('aria-hidden', 'true');
+    fog.innerHTML = '<span></span><span></span>'; document.body.append(fog);
+    if (!reduceMotion()) startWisps(document.querySelector('.hero'), reapOne);
+    return reapOne;
+  }
+  // Soul wisps drift up through the hero now and then; clicking one reaps it. Pointer-only extras (Grim and the
+  // pot are the keyboard path), so they stay out of the tab order and away from screen readers.
+  function startWisps(hero, reapOne) {
+    if (!hero) return;
+    let n = 0;
+    const spawn = () => {
+      if (document.hidden || n >= 3) return;
+      const w = document.createElement('button'); w.type = 'button'; w.className = 'wisp'; w.tabIndex = -1; w.setAttribute('aria-hidden', 'true');
+      w.style.left = (4 + Math.random() * 88).toFixed(1) + '%'; w.style.top = (40 + Math.random() * 50).toFixed(1) + '%';
+      w.style.animationDuration = (8 + Math.random() * 5).toFixed(1) + 's';
+      n++;
+      const gone = () => { if (w.isConnected) { w.remove(); n--; } };
+      w.addEventListener('animationend', gone);
+      w.addEventListener('click', () => { if (w.classList.contains('popped')) return; w.classList.add('popped'); reapOne(true); hop(grimEl); setTimeout(gone, 500); });
+      hero.append(w);
+    };
+    setInterval(spawn, 2600); spawn();
   }
 
   // Halloween hero dressing: a cobweb in the corner, low drifting fog and a few pixel bats.

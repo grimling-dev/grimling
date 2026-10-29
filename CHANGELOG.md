@@ -58,6 +58,6 @@ a pane beside the chat for summoning, watching and messaging subagents.
 
 ### Known limitations
 
-- **macOS is untested.** The test suite passes on Windows and Linux; nobody
-  has run Grimling on macOS yet. It should work; if something looks wrong,
+- **macOS is not yet tried live.** The test suite passes on Windows, Linux
+  and macOS in CI; nobody has run Grimling on a Mac yet. It should work; if something looks wrong,
   `/grimling-feedback` or an issue with what you see helps.

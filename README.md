@@ -27,7 +27,7 @@ Then run `/reload-plugins` (or start a new session) and type `/grimling`. Update
 |---|---|
 | Windows 11 | tested |
 | Linux | tested (test suite) |
-| macOS | untested: it should work; if something looks wrong, `/grimling-feedback` or an issue helps |
+| macOS | test suite passes in CI; not yet tried live. If something looks wrong, `/grimling-feedback` or an issue helps |
 
 ## What it does
 
@@ -83,7 +83,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). In short: load a clone with `claude --pl
 
 ## Roadmap
 
-A demo video, more agent packs, macOS testing, Arena tuning; later per-agent cost bars and one pane that sees agents from every terminal.
+Now (v0.1.0, early access): tests pass on Windows, Linux and macOS in CI; the GPU swarm setup guide; feedback through `/grimling-feedback`. Next: a demo video, more agent packs, a live try on macOS, Arena tuning. Later: a prompt library with `@` shortcuts, saved Mermaid diagrams, a "needs you" queue and richer notification rules, per-agent cost bars, one pane for every terminal. Order can change.
 
 ## License and contact
 
