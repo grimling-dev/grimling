@@ -1,0 +1,22 @@
+{
+  "name": "grimling",
+  "owner": { "name": "Light House Automations LLC" },
+  "description": "Grimling, an unofficial community mod for Claude Code: a pane of pixel-art agent cards to summon, watch and message subagents.",
+  "plugins": [
+    {
+      "name": "grimling",
+      "source": "./",
+      "description": "Summon, watch and message subagents from a pixel-art card grid; a Grimoire of agent types, swarm launch, Arena and a usage meter.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Light House Automations LLC",
+        "url": "https://github.com/grimling-dev"
+      },
+      "homepage": "https://github.com/grimling-dev/grimling",
+      "repository": "https://github.com/grimling-dev/grimling",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": ["subagents", "agents", "mod", "pane", "pixel-art", "grimoire", "arena", "swarm", "usage-meter"]
+    }
+  ]
+}

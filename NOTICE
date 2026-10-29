@@ -1,0 +1,47 @@
+Grimling
+Copyright (c) 2026 Light House Automations LLC
+
+Grimling is an unofficial community mod for Claude Code. It is not made,
+endorsed or supported by Anthropic and is not affiliated with Anthropic.
+"Claude" and "Claude Code" are trademarks of Anthropic, PBC, used here only to
+say what the mod works with.
+
+
+Two licenses
+------------
+
+1. Code: MIT (see LICENSE). This covers every source file, test, schema,
+   manifest and document in this repository, except the art listed in 2.
+
+2. Art: Creative Commons Attribution 4.0 International (CC BY 4.0),
+   https://creativecommons.org/licenses/by/4.0/
+
+   The art is Grim (the reaper mascot) and the pixel-art agent sprites:
+
+   - hooks/register.tsx: the sprite tables PALETTE and SPRITES, and Grim's
+     frames and colours GRIM and GRIM_PAL. The code around them is MIT.
+   - site/index.html: the SPRITES table and the GRIM frames drawn on the page.
+
+   You may share and adapt the art, including commercially, as long as you
+   give credit, link to the license and say if you changed it. Suggested
+   credit:
+
+     "Grim and the Grimling sprites by Light House Automations LLC,
+      CC BY 4.0, https://github.com/grimling-dev/grimling"
+
+   The creatures the mod generates for agents without drawn art come from
+   code (the creature() function in hooks/register.tsx) and are covered by
+   the MIT license like the rest of the code.
+
+   The names "Grimling" and "Grim" are not licensed by either license. You
+   may describe your work as based on Grimling, but please do not use the
+   names or the mascot in a way that suggests your project is the official
+   one.
+
+
+Third-party material used by the site
+-------------------------------------
+
+- three.js, MIT License, Copyright (c) 2010-2021 three.js authors.
+- Pixelify Sans, Atkinson Hyperlegible and JetBrains Mono fonts, SIL Open Font
+  License 1.1, by their respective authors.

@@ -1,0 +1,20 @@
+# Files with YAML frontmatter stay LF on every checkout: with CRLF (Windows,
+# core.autocrlf=true) Claude Code fails to parse some agent frontmatter and
+# loads the agent with its fields dropped.
+agents/*.md text eol=lf
+prompts/*.md text eol=lf
+templates/*.md text eol=lf
+examples/templates/*.md text eol=lf
+skills/**/*.md text eol=lf
+drafts/**/*.md text eol=lf
+
+# The site's CSP pins sha256 hashes of the inline <script> in site/index.html
+# (site/vercel.json, checked by release/site-csp-hashes.mjs). Hashes are over
+# LF text, so the served file must be LF on every checkout and deploy.
+site/**/*.html text eol=lf
+site/**/*.css text eol=lf
+site/**/*.js text eol=lf
+site/**/*.json text eol=lf
+site/**/*.txt text eol=lf
+site/vendor/** -diff
+site/**/*.woff2 binary

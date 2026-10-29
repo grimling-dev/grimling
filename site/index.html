@@ -1,0 +1,958 @@
+<title>Grimling</title>
+<meta name="description" content="Grimling: a pane of pixel-art agents beside your Claude Code chat. Launch, message and read subagents without leaving the terminal.">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<script>
+/* Seasonal layer switch. Everything Halloween hangs off the `halloween` class on <html>:
+   on from Oct 15 to Nov 2 (local date); ?halloween=1 or ?halloween=0 forces it for previews. */
+(function () {
+  var on = false;
+  try {
+    var d = new Date(), m = d.getMonth(), n = d.getDate();
+    on = (m === 9 && n >= 15) || (m === 10 && n <= 2);
+    var q = new URLSearchParams(location.search).get('halloween');
+    if (q === '1') on = true; else if (q === '0') on = false;
+  } catch (e) {}
+  if (on) document.documentElement.classList.add('halloween');
+})();
+</script>
+<style>
+/* Layout: a sticky top bar, a split hero (copy left, live voxel grimoire right), then one reading column
+   with a guide that keeps a short contents rail beside it on wide screens. Content is plain HTML so it is easy to update. */
+:root {
+  --bg: #f4f2f8;
+  --surface: #ffffff;
+  --sunk: #ebe7f2;
+  --ink: #1d1830;
+  --muted: #5d566f;
+  --line: #dcd6e7;
+  --teal: #0f7f75;
+  --amber: #9a6b00;
+  --plum: #6a3fc2;
+  --term-bg: #17131f;
+  --term-ink: #e9e5f3;
+  --term-dim: #8f88a6;
+  --pumpkin: #c2560c;
+  --bat: #2a2140;
+  --fog: rgba(106, 63, 194, 0.13);
+  --display: "Pixelify Sans", "Courier New", monospace;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.4rem, 6vw, 3.8rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15121d; --surface: #1d1928; --sunk: #110e18; --ink: #ece8f5; --muted: #a59eb9; --line: #2e283e;
+    --teal: #2ec4b6; --amber: #ffd23f; --plum: #b48cff; --term-bg: #0f0c15; --term-ink: #e9e5f3; --term-dim: #8f88a6;
+    --pumpkin: #ff8c42; --bat: #6b5c96; --fog: rgba(214, 205, 240, 0.10);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15121d; --surface: #1d1928; --sunk: #110e18; --ink: #ece8f5; --muted: #a59eb9; --line: #2e283e;
+  --teal: #2ec4b6; --amber: #ffd23f; --plum: #b48cff; --term-bg: #0f0c15; --term-ink: #e9e5f3; --term-dim: #8f88a6;
+  --pumpkin: #ff8c42; --bat: #6b5c96; --fog: rgba(214, 205, 240, 0.10);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 72px); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: var(--step-0); line-height: 1.6;
+}
+a { color: var(--teal); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 500; }
+p { margin: 0; }
+code, kbd { font-family: var(--mono); font-size: 0.88em; }
+kbd {
+  display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 5px; background: var(--surface); color: var(--ink); white-space: nowrap;
+}
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.eyebrow { font-family: var(--mono); font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* Top bar */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 20px; padding-block: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 1.35rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+.brand canvas { width: 28px; height: 28px; image-rendering: pixelated; }
+.top nav { display: flex; gap: 18px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.top nav a { color: var(--muted); text-decoration: none; font-size: var(--step--1); }
+.top nav a:hover { color: var(--ink); }
+@media (max-width: 640px) { .top nav a.opt { display: none; } }
+
+/* Hero */
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; padding-block: 56px 40px; }
+@media (max-width: 860px) { .hero .wrap { grid-template-columns: 1fr; padding-block: 36px 24px; } }
+.hero h1 { font-size: var(--step-3); }
+.hero h1 span { color: var(--teal); }
+.hero .lede { font-size: var(--step-1); color: var(--muted); max-width: 34ch; margin-top: 18px; line-height: 1.45; }
+.status { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--mono); font-size: 0.8rem; color: var(--muted); background: var(--surface); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+.ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+.btn { display: inline-block; padding: 11px 18px; border-radius: 8px; font-weight: 700; text-decoration: none; border: 2px solid var(--ink); color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--bg); }
+.btn:hover { transform: translateY(-1px); }
+.stage { position: relative; width: 100%; max-width: 540px; aspect-ratio: 1 / 1; justify-self: center; }
+.stage canvas { width: 100%; height: 100%; display: block; }
+.stage .tag { position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); font-family: var(--mono); font-size: 0.85rem; padding: 6px 12px; border-radius: 6px; background: var(--term-bg); color: var(--term-ink); white-space: nowrap; border: 1px solid var(--line); }
+.stage .tag b { color: #2ec4b6; font-weight: 600; }
+
+/* Sections */
+section.band { padding-block: 56px; border-top: 1px solid var(--line); }
+.head { display: grid; gap: 10px; max-width: 62ch; margin-bottom: 32px; }
+.head p { color: var(--muted); }
+
+.features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 40px; }
+@media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
+.feature { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: start; }
+.feature canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+.feature h3 { margin-bottom: 4px; }
+.feature p { color: var(--muted); }
+
+/* Pane mock */
+.split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 40px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+.term { background: var(--term-bg); color: var(--term-ink); border-radius: 12px; font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; overflow-x: auto; border: 1px solid var(--line); }
+.term .bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #2a2438; }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #3a3348; }
+.term .body { padding: 14px 16px 16px; min-width: 360px; display: grid; gap: 10px; }
+.term .dim { color: var(--term-dim); }
+.term .tabs span { padding: 1px 7px; margin-right: 4px; border: 1px solid #3a3348; border-radius: 3px; }
+.term .tabs span.on { background: #2ec4b6; color: #0f0c15; border-color: #2ec4b6; }
+.term .meter { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.m { display: inline-flex; gap: 6px; align-items: center; }
+.m u { text-decoration: none; display: inline-block; width: 70px; height: 8px; background: #2a2438; position: relative; border-radius: 1px; overflow: hidden; }
+.m u::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--c, #43aa8b); }
+.box { border: 1px solid #3a3348; border-radius: 4px; padding: 8px 10px; position: relative; }
+.box > .lbl { position: absolute; top: -0.75em; left: 8px; padding: 0 4px; background: var(--term-bg); color: var(--term-dim); font-size: 0.75rem; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.card { display: grid; justify-items: center; gap: 2px; padding: 6px 2px; border: 1px solid #2a2438; border-radius: 4px; }
+.card.ring { border-color: #ffd23f; box-shadow: 0 0 0 1px #ffd23f inset; }
+.card canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+.card small { font-size: 0.72rem; }
+.run { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; }
+.ok { color: #43aa8b; } .warn { color: #ffd23f; } .bad { color: #ff5d73; }
+.chips span { margin-right: 8px; } .chips .on { color: #2ec4b6; text-decoration: underline; }
+.callouts { display: grid; gap: 16px; }
+.callouts div { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; }
+.callouts b.n { font-family: var(--mono); color: var(--plum); }
+.term .body.cmd { min-width: 0; gap: 4px; }
+.term .body.cmd code { overflow-wrap: anywhere; }
+
+/* Guide */
+.guide { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 860px) { .guide { grid-template-columns: 1fr; gap: 24px; } }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 80px); align-self: start; display: grid; gap: 6px; font-size: var(--step--1); }
+.toc a { color: var(--muted); text-decoration: none; padding: 2px 0 2px 10px; border-left: 2px solid var(--line); }
+.toc a:hover { color: var(--ink); border-left-color: var(--teal); }
+@media (max-width: 860px) { .toc { position: static; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+.chapter { display: grid; gap: 14px; padding-bottom: 36px; margin-bottom: 36px; border-bottom: 1px dashed var(--line); max-width: 68ch; }
+.chapter:last-child { border-bottom: 0; margin-bottom: 0; }
+.chapter ol, .chapter ul { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.note { padding: 12px 14px; border-radius: 8px; background: var(--sunk); color: var(--muted); font-size: var(--step--1); }
+.note strong { color: var(--ink); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; }
+
+/* Safety */
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.rules div { padding: 20px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); display: grid; gap: 6px; }
+.rules b { font-family: var(--display); font-weight: 500; font-size: 1.1rem; }
+.rules p { color: var(--muted); font-size: var(--step--1); }
+
+/* Changelog + roadmap */
+.log { display: grid; gap: 0; }
+.entry { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.entry:last-child { border-bottom: 0; }
+@media (max-width: 560px) { .entry { grid-template-columns: 1fr; gap: 4px; } }
+.entry .when { font-family: var(--mono); font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.entry .when b { display: block; color: var(--plum); font-weight: 600; }
+.entry ul { margin: 6px 0 0; padding-left: 1.2em; color: var(--muted); display: grid; gap: 4px; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 760px) { .lanes { grid-template-columns: 1fr; } }
+.lane { border-top: 3px solid var(--c); padding-top: 14px; display: grid; gap: 10px; align-content: start; }
+.lane h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.lane h3 small { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+.lane ul { margin: 0; padding-left: 1.1em; color: var(--muted); display: grid; gap: 6px; }
+
+/* FAQ */
+details { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 72ch; }
+summary { cursor: pointer; font-weight: 700; }
+details p { margin-top: 8px; color: var(--muted); }
+
+footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var(--muted); font-size: var(--step--1); }
+
+/* Grim, the mascot */
+.hello { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 14px; }
+.hello canvas { width: 80px; height: 80px; image-rendering: pixelated; cursor: pointer; }
+.hello .say { position: relative; font-family: var(--mono); font-size: 0.85rem; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 10px; background: var(--surface); margin-bottom: 30px; }
+.hello .say::before { content: ""; position: absolute; left: -9px; bottom: 8px; width: 12px; height: 12px; background: var(--surface); border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); }
+.hop { animation: hop 0.5s steps(5) 1; }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-14px); } 70% { transform: translateY(-4px); } }
+.pal {
+  position: fixed; z-index: 6; display: flex; align-items: flex-end; gap: 8px;
+  right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+}
+.pal.off { opacity: 0; transform: translateY(20px); }
+.pal canvas { width: 56px; height: 56px; image-rendering: pixelated; pointer-events: auto; cursor: pointer; filter: drop-shadow(0 4px 0 color-mix(in srgb, var(--ink) 18%, transparent)); }
+.pal .say { max-width: 220px; font-family: var(--mono); font-size: 0.78rem; line-height: 1.4; padding: 7px 10px; border-radius: 8px; border: 2px solid var(--ink); background: var(--surface); color: var(--ink); margin-bottom: 26px; }
+@media (max-width: 560px) { .pal .say { display: none; } .pal canvas { width: 44px; height: 44px; } }
+.typed::after { content: "▌"; color: #ffd23f; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.m u::after { transition: width 1.2s ease; }
+.run { transition: opacity 0.4s; }
+.hero h1 span { background: linear-gradient(90deg, var(--teal), var(--plum), var(--amber), var(--teal)); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 8s linear infinite; }
+@keyframes shimmer { to { background-position: 300% 0; } }
+.feature canvas { transition: transform 0.2s; }
+.feature:hover canvas { transform: translateY(-4px) rotate(-6deg); }
+@media (prefers-reduced-motion: reduce) {
+  .hop, .typed::after, .hero h1 span { animation: none; }
+  .hero h1 span { color: var(--teal); background: none; }
+}
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+/* Halloween layer: every rule below is scoped to html.halloween, and its elements are only
+   created by the script when the class is on, so the page outside the season is unchanged. */
+html.halloween .hero { position: relative; overflow: hidden; overflow: clip; }
+html.halloween .hero > .wrap { position: relative; z-index: 1; }
+.hw-bats { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.hw-fog { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; pointer-events: none; z-index: 0;
+  -webkit-mask-image: linear-gradient(to top, #000 35%, transparent); mask-image: linear-gradient(to top, #000 35%, transparent); }
+.hw-fog span { position: absolute; left: 0; bottom: 0; width: 200%; height: 100%; background-repeat: repeat-x; background-size: 50% 100%;
+  background-image: radial-gradient(ellipse 18% 55% at 20% 85%, var(--fog), transparent 70%), radial-gradient(ellipse 22% 45% at 48% 95%, var(--fog), transparent 70%),
+    radial-gradient(ellipse 16% 60% at 72% 88%, var(--fog), transparent 70%), radial-gradient(ellipse 12% 50% at 90% 96%, var(--fog), transparent 70%);
+  animation: hw-fog 70s linear infinite; }
+.hw-fog span + span { height: 70%; opacity: 0.8; animation-duration: 46s; animation-direction: reverse; background-position: 30% 0; }
+@keyframes hw-fog { to { transform: translateX(-50%); } }
+.hw-web { position: absolute; top: 0; right: 0; width: 150px; height: 150px; pointer-events: none; z-index: 0; color: var(--muted); opacity: 0.5; }
+.hw-web .spider { animation: hw-dangle 5s ease-in-out infinite; }
+@keyframes hw-dangle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(16px); } }
+html.halloween .status i { position: relative; width: 11px; height: 9px; border-radius: 45%; background: var(--pumpkin); margin-top: 3px; }
+html.halloween .status i::after { content: ""; position: absolute; left: 4px; top: -3px; width: 2px; height: 3px; background: #43aa8b; }
+html.halloween .hero h1 span { background-image: linear-gradient(90deg, var(--pumpkin), var(--plum), var(--amber), var(--pumpkin)); }
+html.halloween .hero h1 { animation: hw-candle 4.5s steps(1) infinite; }
+@keyframes hw-candle {
+  0%, 100% { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--pumpkin) 30%, transparent)); }
+  37% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--pumpkin) 40%, transparent)); }
+  41% { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--pumpkin) 22%, transparent)); }
+  44% { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--pumpkin) 34%, transparent)); }
+  78% { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--pumpkin) 26%, transparent)); }
+}
+@media (max-width: 560px) { .hw-web { width: 96px; height: 96px; } }
+@media (prefers-reduced-motion: reduce) {
+  .hw-fog span, .hw-web .spider { animation: none; }
+  html.halloween .hero h1 { animation: none; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--pumpkin) 30%, transparent)); }
+  html.halloween .hero h1 span { color: var(--pumpkin); background: none; }
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><canvas id="brandgrim" width="12" height="12" aria-hidden="true"></canvas>Grimling</a>
+    <nav aria-label="Sections">
+      <a href="#what" class="opt">What it does</a>
+      <a href="#guide">User guide</a>
+      <a href="#safety" class="opt">Safety</a>
+      <a href="#news">What's new</a>
+      <a href="#faq" class="opt">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <div class="hello"><canvas id="grim" width="12" height="12" aria-label="Grim, the Grimling mascot, waving"></canvas><span class="say" id="grimsay">Hi, I'm Grim. I reap finished agents' answers for you.</span></div>
+        <div class="status"><i></i>Early access · <span data-sync="version">v0.1.0</span></div>
+        <h1>Your agents, <span>summoned</span> beside the chat.</h1>
+        <p class="lede">Grimling is a Claude Code mod that docks a pane of pixel-art agent cards next to your conversation. Pick one, type the task, press Enter. Watch it work, message it, read its answer.</p>
+        <div class="ctas">
+          <a class="btn primary" href="#install">Install</a>
+          <a class="btn" href="#guide">Read the user guide</a>
+        </div>
+      </div>
+      <div class="stage">
+        <canvas id="grimoire" aria-label="A ring of pixel-art agent creatures turning around an open book"></canvas>
+        <div class="tag" id="tag" aria-live="polite"><b>Scout</b> · search the code</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="what">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">What it does</span>
+        <h2>One pane for every agent you run.</h2>
+        <p>Subagents are powerful but easy to lose track of. Grimling gives each one a face, a status and a place to talk to it, without leaving the terminal.</p>
+      </div>
+      <div class="features">
+        <div class="feature"><canvas data-sprite="planner" width="8" height="8" aria-hidden="true"></canvas><div><h3>The Grimoire</h3><p>A filterable grid of agent cards: the built-in agents plus every agent file in your user and project folders. Agents without art get a generated creature of their own.</p></div></div>
+        <div class="feature"><canvas data-sprite="builder" width="8" height="8" aria-hidden="true"></canvas><div><h3>Launch in one line</h3><p>Choose a card, type the task in the summon box and press Enter. If the launch is refused, your task stays in the box to try again.</p></div></div>
+        <div class="feature"><canvas data-sprite="fetcher" width="8" height="8" aria-hidden="true"></canvas><div><h3>Live agent cards</h3><p>Running agents get their own cards. Send a message to one mid-task, or open a finished one to read its answer and add it to your prompt.</p></div></div>
+        <div class="feature"><canvas data-sprite="guide" width="8" height="8" aria-hidden="true"></canvas><div><h3>Usage meter</h3><p>Your status line as bars: context used, plan limits with reset times, session cost and model.</p></div></div>
+        <div class="feature"><canvas data-sprite="swarm" width="8" height="8" aria-hidden="true"></canvas><div><h3>Flow, Table and Mermaid</h3><p>See who spawned whom as a flow, scan every run as a table, or copy the agent graph to your clipboard as a Mermaid diagram.</p></div></div>
+        <div class="feature"><canvas data-sprite="gpu" width="8" height="8" aria-hidden="true"></canvas><div><h3>Arena</h3><p>Pit two agent cards against the same puzzle. The correct answer wins, with speed and then token count as tie-breakers. Each card keeps its own win/loss rating.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap split">
+      <div class="term" role="img" aria-label="A sketch of the Grimling pane: tab bar, usage meter, summon box, card grid and two live agents">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="tabs"><span class="on">DECK</span><span>FLOW</span><span>TABLE</span><span>KEYS</span></div>
+          <div class="meter dim">
+            <span class="m">ctx <u style="--v:42%"></u> 42%</span>
+            <span class="m">5h <u style="--v:31%"></u> 31%</span>
+            <span class="m">7d <u style="--v:64%;--c:#ffd23f"></u> 64%</span>
+          </div>
+          <div class="box"><span class="lbl" id="sumlbl">summon · Scout</span><span class="typed" id="typed">find where the auth token is refreshed</span></div>
+          <div class="box"><span class="lbl">grimoire</span>
+            <div class="chips dim"><span class="on">All</span><span>Code</span><span>Rsch</span><span>Web</span><span>Ops</span><span>Swarm</span></div>
+            <div class="cards" style="margin-top:8px">
+              <div class="card ring"><canvas data-sprite="scout" width="8" height="8"></canvas><small>1 Scout</small></div>
+              <div class="card"><canvas data-sprite="builder" width="8" height="8"></canvas><small>2 Build</small></div>
+              <div class="card"><canvas data-sprite="planner" width="8" height="8"></canvas><small>3 Plan</small></div>
+              <div class="card"><canvas data-sprite="fetcher" width="8" height="8"></canvas><small>4 Fetch</small></div>
+            </div>
+          </div>
+          <div class="box"><span class="lbl">agents</span>
+            <div id="runs">
+              <div class="run"><span class="warn">◉</span><span>Scout · auth token refresh</span><span class="dim">0:42</span></div>
+              <div class="run"><span class="ok">●</span><span>Plan · migration steps, answer ready</span><span class="dim">2:10</span></div>
+            </div>
+          </div>
+          <div class="dim">Enter: open · c: copy · x: close · Esc: back to prompt</div>
+        </div>
+      </div>
+      <div class="callouts">
+        <span class="eyebrow">The pane at a glance</span>
+        <div><b class="n">1</b><p><strong>Tab bar.</strong> Deck, Flow, Table and Keys. Press the letter or Tab to it.</p></div>
+        <div><b class="n">2</b><p><strong>Meter.</strong> Green, then yellow from 60%, red from 85%.</p></div>
+        <div><b class="n">3</b><p><strong>Summon box.</strong> Always ready. It launches whichever card is the target.</p></div>
+        <div><b class="n">4</b><p><strong>Grimoire.</strong> Category chips and a name filter keep a large deck manageable.</p></div>
+        <div><b class="n">5</b><p><strong>Agents.</strong> Running, finished and failed agents, each one a card you can open.</p></div>
+        <p class="note">Built for a narrow docked pane of about 44 columns. Labels stay short so they fit beside their number.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="guide">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">User guide</span>
+        <h2>Everything Grimling does, and the keys for it.</h2>
+        <p>The bottom line of the pane always tells you what the next key will do. Run <code>/grimling-tour</code> for a guided walk through every key.</p>
+      </div>
+      <div class="guide">
+        <nav class="toc" aria-label="Guide contents">
+          <a href="#g-start">Getting in and out</a>
+          <a href="#g-launch">Launching an agent</a>
+          <a href="#g-grimoire">The Grimoire</a>
+          <a href="#g-live">Live agents</a>
+          <a href="#g-views">Views and buttons</a>
+          <a href="#g-meter">The meter</a>
+          <a href="#g-arena">Arena</a>
+          <a href="#g-dex">Collecting agent types</a>
+          <a href="#g-keys">All keys</a>
+        </nav>
+        <div>
+          <article class="chapter" id="g-start">
+            <h3>Getting in and out</h3>
+            <p>Grimling sits beside the chat. The keyboard belongs to either the prompt or the pane, never both.</p>
+            <ul>
+              <li><code>/grimling</code> opens the pane and gives it the keyboard.</li>
+              <li><kbd>ctrl+x</kbd> then <kbd>Tab</kbd> moves the keyboard from the prompt into the pane. Clicking the pane works too.</li>
+              <li><kbd>Tab</kbd>, <kbd>↓</kbd> and <kbd>→</kbd> move forward. <kbd>Shift+Tab</kbd>, <kbd>↑</kbd> and <kbd>←</kbd> move back.</li>
+              <li><kbd>Esc</kbd> hands the keyboard back to the prompt.</li>
+            </ul>
+            <p class="note"><strong>Typing is safe.</strong> While a text box has the focus ring, letters and digits only type. Tab letters and card numbers work again once you Tab out.</p>
+          </article>
+
+          <article class="chapter" id="g-launch">
+            <h3>Launching an agent</h3>
+            <ol>
+              <li>Move onto a card with <kbd>Tab</kbd> or the arrows. Its entry shows: number, category, agent type and what it is for.</li>
+              <li>Press <kbd>Enter</kbd> on the card, or its number <kbd>1</kbd> to <kbd>9</kbd>. It becomes the launch target and the cursor jumps to the summon box.</li>
+              <li>Type the task and press <kbd>Enter</kbd>. The agent starts and gets a live card.</li>
+            </ol>
+            <p>You can also Tab straight to the summon box and type: it launches the current target. If the launch is refused, the task stays in the box.</p>
+            <p class="note"><strong>Template cards are different.</strong> Swarm (and any template you enable) never launches anything. It adds a request after your prompt draft so you and the main session decide what runs. Press <kbd>Esc</kbd>, then <kbd>Enter</kbd> to send it.</p>
+          </article>
+
+          <article class="chapter" id="g-grimoire">
+            <h3>The Grimoire</h3>
+            <p>The deck holds three kinds of card.</p>
+            <ul>
+              <li><strong>Built-ins:</strong> Scout (search the code), Builder (multi-step tasks), Planner (design a plan), Fetcher (read a URL), Guide (Claude Code and API answers), and the Swarm template card.</li>
+              <li><strong>Your agent files:</strong> every agent in <code>~/.claude/agents</code> and in the project's <code>.claude/agents</code>. A project file wins over a user file of the same name.</li>
+              <li><strong>Pack agents:</strong> agent packs you list in <code>cards.packs</code>, shown as <code>&lt;pack&gt;:&lt;name&gt;</code>. v0.1.0 ships no pack of its own; more packs later.</li>
+            </ul>
+            <p>Filter by category with the chips (All, Code, Research, Web, Ops, Swarm, Custom) or press <kbd>/</kbd> to filter by name. Card art, short names and categories can be set in <code>~/.claude/grimling/dex.json</code>.</p>
+            <p><strong>Recent runs</strong> sit under the agents when there is room: your last six distinct launches. Press <kbd>Enter</kbd> on one to put its task and agent back in the summon box.</p>
+          </article>
+
+          <article class="chapter" id="g-live">
+            <h3>Live agents</h3>
+            <ul>
+              <li><kbd>Enter</kbd> on a running agent opens a message box. Type, then <kbd>Enter</kbd> sends it to that agent.</li>
+              <li><kbd>Enter</kbd> on a finished agent shows its answer. <kbd>Enter</kbd> again adds it after your prompt draft, <kbd>c</kbd> copies it, <kbd>x</kbd> closes it.</li>
+              <li>Answers over 8,000 characters are cut and marked "truncated". If the prompt cannot take the answer, a toast says so and the view stays open.</li>
+              <li>An agent that disappears without a final status shows as <code>gone</code> after about 10 seconds.</li>
+            </ul>
+            <p><kbd>x</kbd> or STOP on a running agent the deck launched opens a Stop / Keep confirm, with Keep under the ring. Grimling stops an agent only when you confirm, and Claude Code's permission check may ask too.</p>
+            <p>A toast appears when an agent finishes, fails or is stopped, and the status line counts running agents and failures.</p>
+          </article>
+
+          <article class="chapter" id="g-views">
+            <h3>Views and buttons</h3>
+            <div class="tablewrap">
+              <table>
+                <thead><tr><th>View</th><th>Key</th><th>What it shows</th></tr></thead>
+                <tbody>
+                  <tr><td>Deck</td><td><kbd>d</kbd></td><td>Summon box, Grimoire, live agents and recent runs.</td></tr>
+                  <tr><td>Flow</td><td><kbd>f</kbd></td><td>Which agent spawned which, as a tree. Rows scroll with the ring; "↑ n more" counts rows out of view.</td></tr>
+                  <tr><td>Table</td><td><kbd>t</kbd></td><td>Every run with status, type and time.</td></tr>
+                  <tr><td>Mermaid</td><td><kbd>m</kbd></td><td>Copies the agent graph as a Mermaid diagram.</td></tr>
+                  <tr><td>Keys</td><td><kbd>k</kbd></td><td>Every command, grouped, and any settings problems.</td></tr>
+                  <tr><td>Help</td><td><kbd>h</kbd></td><td>Starts the tour.</td></tr>
+                  <tr><td>Arena</td><td><kbd>a</kbd></td><td>Two cards, one puzzle (below).</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="chapter" id="g-meter">
+            <h3>The meter</h3>
+            <p>Under the tabs on every view. It mirrors your status line as bars.</p>
+            <ul>
+              <li><code>ctx</code>: context window used, in tokens.</li>
+              <li><code>5h</code> and <code>7d</code>: plan limits, with their reset time.</li>
+              <li>Session cost, session time and model (and a session count, if you point <code>meter.sessionsFile</code> at one).</li>
+            </ul>
+            <p>Bars are green, turn yellow from 60% and red from 85%.</p>
+          </article>
+
+          <article class="chapter" id="g-arena">
+            <h3>Arena</h3>
+            <p>A small proving ground for your cards. Press <kbd>a</kbd> or use the Arena button on the bottom row.</p>
+            <ol>
+              <li>Pick a Red and a Blue fighter with <kbd>‹</kbd> and <kbd>›</kbd>.</li>
+              <li>Pick a puzzle. Each one has a known answer.</li>
+              <li>Press <kbd>Enter</kbd> on FIGHT. Both fighters run on the same small model (haiku by default).</li>
+            </ol>
+            <p>The correct answer wins. If both are correct, the faster wins; if their times are close, fewer tokens wins; if that ties too, it is a draw. Health bars move only once a fight is scored. Wins, losses and a rating per card are kept in <code>~/.claude/grimling/arena.json</code>. CLEAR resets a result or a stuck fight. After a scored fight, <kbd>s</kbd> copies a small results card to share.</p>
+            <p class="note"><strong>Early scaffold.</strong> Puzzles and tie-breaks are still being tuned, so expect more draws than you would like.</p>
+          </article>
+
+          <article class="chapter" id="g-dex">
+            <h3>Collecting agent types</h3>
+            <p>Every launch, answer, stop and scored fight is logged on your computer in <code>~/.claude/grimling/runs/</code>, one file a day, redacted by default (<code>log.runs</code>: redacted, full, meta or off). Ask Claude to "collect agent types" and the bundled <code>agent-dex</code> skill reads that log, proposes specialized agents with a card and sprite, and saves only the ones you approve.</p>
+          </article>
+
+          <article class="chapter" id="g-keys">
+            <h3>All keys</h3>
+            <div class="tablewrap">
+              <table>
+                <thead><tr><th>Key</th><th>Where</th><th>Does</th></tr></thead>
+                <tbody>
+                  <tr><td><code>/grimling</code></td><td>Prompt</td><td>Open the pane with the keyboard</td></tr>
+                  <tr><td><code>/grimling-tour</code></td><td>Prompt</td><td>Walk through every key; Esc ends it</td></tr>
+                  <tr><td><kbd>ctrl+x</kbd> <kbd>Tab</kbd></td><td>Prompt</td><td>Move the keyboard into the pane</td></tr>
+                  <tr><td><kbd>Esc</kbd></td><td>Pane</td><td>Hand the keyboard back to the prompt</td></tr>
+                  <tr><td><kbd>d</kbd> <kbd>f</kbd> <kbd>t</kbd> <kbd>k</kbd></td><td>Pane</td><td>Deck, Flow, Table, Keys</td></tr>
+                  <tr><td><kbd>m</kbd> <kbd>h</kbd> <kbd>a</kbd></td><td>Pane</td><td>Copy Mermaid, Help, Arena</td></tr>
+                  <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Grimoire</td><td>Make that card the launch target</td></tr>
+                  <tr><td><kbd>/</kbd></td><td>Grimoire</td><td>Filter cards by name</td></tr>
+                  <tr><td><kbd>Enter</kbd></td><td>Card</td><td>Target it, message it, or open its answer</td></tr>
+                  <tr><td><kbd>c</kbd> <kbd>x</kbd></td><td>Answer</td><td>Copy, close</td></tr>
+                  <tr><td><kbd>x</kbd></td><td>Running card</td><td>Stop it (asks Stop / Keep first)</td></tr>
+                  <tr><td><code>/grimling-setup</code></td><td>Prompt</td><td>Check, show or set your settings</td></tr>
+                  <tr><td><code>/grimling-feedback</code></td><td>Prompt</td><td>Preview a report, then open it on GitHub</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="safety">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Safety by design</span>
+        <h2>It shows and launches. It stops only when you say so.</h2>
+        <p>Grimling runs inside your Claude Code session with the same permissions you already gave it. These limits are built in.</p>
+      </div>
+      <div class="rules">
+        <div><b>Stops only on your confirm</b><p>The stop button opens Stop / Keep with Keep as the default, then goes through Claude Code's permission check.</p></div>
+        <div><b>No network calls</b><p>The mod makes no network calls of its own. <code>/grimling-feedback</code> only opens a link in your browser after showing you what it holds.</p></div>
+        <div><b>Swarms ask first</b><p>Swarm cards only fill your prompt, so large multi-agent runs and anything that costs money wait for your go.</p></div>
+        <div><b>Your files stay local</b><p>The run log (redacted by default), settings and Arena ratings are plain files in <code>~/.claude/grimling</code>. Agents you launch run in your session and use your plan.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="install">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Install</span>
+        <h2>One line in Claude Code.</h2>
+        <p>In a Claude Code session:</p>
+      </div>
+      <div class="term"><div class="body cmd"><code>/plugin install grimling --marketplace grimling-dev/grimling</code></div></div>
+      <p style="margin-top:16px">Or from a terminal:</p>
+      <div class="term" style="margin-top:8px"><div class="body cmd"><code>claude plugin marketplace add grimling-dev/grimling</code><code>claude plugin install grimling@grimling</code></div></div>
+      <p style="margin-top:16px">Then run <code>/reload-plugins</code> (or start a new session) and type <code>/grimling</code>. Source and issues: <a href="https://github.com/grimling-dev/grimling">github.com/grimling-dev/grimling</a>.</p>
+      <p class="note" style="margin-top:16px"><strong>Requirements:</strong> Claude Code 2.1.312 or newer (tested). Mods are an early-access Claude Code feature and may change between releases. The pane wants about 44 columns. Tested on Windows and Linux; macOS is untested for now.</p>
+    </div>
+  </section>
+
+  <section class="band" id="news">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">What's new</span>
+        <h2>Changelog</h2>
+        <p>Newest first.</p>
+      </div>
+      <div class="log">
+        <!-- sync-site:changelog -->
+        <div class="entry"><div class="when"><b>v0.1.0</b>2026-10-29</div><div><strong>First public release.</strong><ul><li><em>Added:</em> <strong>Pane and tabs.</strong> <code>/grimling</code> opens a pane built for a narrow docked column (about 44 columns) with Deck, Flow, Table, Mermaid and Keys tabs.</li><li><em>Added:</em> <strong>The Grimoire.</strong> A filterable grid of pixel-art agent cards: the built-in agent types, every agent file in <code>~/.claude/agents</code> and in the project's <code>.claude/agents</code> (a project file wins over a user file of the same name), and Swarm, which fills a workflow request into your prompt instead of launching anything.</li><li><em>Added:</em> <strong>Launch in one line.</strong> Pick a card, type the task, press Enter.</li><li><em>Added:</em> <strong>Live agent cards.</strong> Running agents get their own cards; send a message to a running agent, read a finished agent's answer, copy it or add it after your prompt draft.</li><li><em>Added:</em> <strong>Stop button.</strong> Stops an agent launched from the deck, only after you confirm it in Claude Code's permission prompt.</li><li><em>Added:</em> <strong>Flow and Table views</strong> of the agents in the session, and a Mermaid tab that copies the agent graph.</li><li><em>Added:</em> <strong>Grim, the mascot.</strong> A small reaper pops up with a speech bubble when an agent finishes, fails or is stopped.</li><li><em>Added:</em> <strong>Meter.</strong> Your status line as bars: context window, plan limits with their reset times, cost, session time and model.</li><li><em>Added:</em> <strong>Arena lite.</strong> Pit two cards against each other on a question with a known answer; both run on a small model and are scored by correctness, then speed, then tokens.</li><li><em>Added:</em> <strong>Run log and the agent-dex skill.</strong> Launches, answers and scored fights are logged on your computer in <code>~/.claude/grimling/runs/</code>, one file a day, redacted by default (modes: redacted, full, meta, off).</li><li><em>Added:</em> <strong>Settings file.</strong> Optional <code>~/.claude/grimling/settings.json</code> with a default for every key and a JSON schema for editor autocomplete.</li><li><em>Added:</em> <strong>Feedback.</strong> <code>/grimling-feedback</code> previews exactly what would be sent (no paths, prompts or answers) and opens a pre-filled GitHub issue or discussion in your browser.</li><li><em>Known limitations:</em> <strong>macOS is untested.</strong> The test suite passes on Windows and Linux; nobody has run Grimling on macOS yet.</li></ul></div></div>
+        <!-- /sync-site:changelog -->
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="roadmap">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Roadmap</span>
+        <h2>What comes next</h2>
+        <p>Order can change. Each step ships when it is tested.</p>
+      </div>
+      <div class="lanes">
+        <div class="lane" style="--c: var(--teal)"><h3>Now <small>v0.1.0</small></h3><ul><li>Early access on Windows and Linux</li><li>Your feedback through <code>/grimling-feedback</code></li></ul></div>
+        <div class="lane" style="--c: var(--amber)"><h3>Next <small>soon</small></h3><ul><li>A short demo video</li><li>More agent packs</li><li>Tested on macOS</li><li>Arena tuning: harder puzzles, a finer tie-break</li></ul></div>
+        <div class="lane" style="--c: var(--plum)"><h3>Later <small>after release</small></h3><ul><li>A prompt library with <code>@</code> shortcuts</li><li>Save Mermaid diagrams to reopen later</li><li>A "needs you" queue and custom notifications</li><li>Per-agent cost bars; one pane for every terminal</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="faq">
+    <div class="wrap">
+      <div class="head"><span class="eyebrow">FAQ</span><h2>Questions</h2></div>
+      <details><summary>Does Grimling change what my agents can do?</summary><p>No. It uses the same agent types and permissions your Claude Code session already has. It only gives them a place to be seen and talked to.</p></details>
+      <details><summary>Does it cost anything to run?</summary><p>The pane itself costs nothing. Agents you launch use your Claude plan the same way they would from the prompt, and the meter shows how much you have used.</p></details>
+      <details><summary>Can I add my own agents?</summary><p>Yes. Any agent file in your user or project agents folder gets a card. Set its art, short name and category in <code>dex.json</code>, or let the <code>agent-dex</code> skill propose one.</p></details>
+      <details><summary>Will it work in my terminal?</summary><p>It is built on Windows Terminal, and its test suite also passes on Linux. macOS is untested at the moment: it should work, and an issue with what you see helps.</p></details>
+      <details><summary>Is this made by Anthropic?</summary><p>No. Grimling is an unofficial community mod for Claude Code, not affiliated with Anthropic.</p></details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Grimling · unofficial community mod for Claude Code · not affiliated with Anthropic · code MIT, art CC BY 4.0 · <a href="https://github.com/grimling-dev/grimling">GitHub</a></span>
+    <span class="contact">Light House Automations LLC · <a href="mailto:alexz@lightauto.tech">alexz@lightauto.tech</a> · <a href="https://lightauto.tech">lightauto.tech</a></span>
+    <span>Page updated 2026-10-29 · <span data-sync="version">v0.1.0</span></span>
+  </div>
+</footer>
+
+<div class="pal off" id="pal" aria-hidden="true"><span class="say" id="palsay">Scroll on, I'll come with you.</span><canvas id="palgrim" width="12" height="12"></canvas></div>
+
+<script src="vendor/three/three.r128.min.js"></script>
+<script>
+(function () {
+  const PALETTE = { k: '#3a3a3a', w: '#f5f5f5', t: '#2ec4b6', y: '#ffd23f', o: '#ff8c42', p: '#9b5de5', s: '#f1c27d', b: '#b5651d', r: '#ff5d73', g: '#43aa8b', c: '#4cc9f0', e: '#8d99ae' };
+  const SPRITES = {
+    scout: ['.k....k.', 'kttttttk', 'twwttwwt', 'twkttwkt', 'tttyyttt', '.tttttt.', '.t.tt.t.', '..k..k..'],
+    builder: ['...yy...', '.oooooo.', '.owoowo.', '.oooooo.', '..okko..', '.oooooo.', 'oo.oo.oo', '.k....k.'],
+    planner: ['...pp...', '..pppp..', '.pppppp.', 'pppppppp', '..ssss..', '..swsw..', '..ssss..', '.pppppp.'],
+    fetcher: ['b......b', 'bb....bb', '.bbbbbb.', '.bwbbwb.', '.bbkkbb.', '..brrb..', '.bbbbbb.', '.b.bb.b.'],
+    guide: ['..yyyy..', '.yyyyyy.', '.ywyyyy.', '.yyyyyy.', '..yyyy..', '...kk...', '..kkkk..', '...kk...'],
+    swarm: ['.yk..yk.', 'ykyk.yky', '.yk..yk.', '........', '..yk..yk', '.ykyk.yk', '..yk..yk', '........'],
+    gpu: ['.c.c.c.c', 'cccccccc', 'ckkkkkkc', 'ckgggkkc', 'ckgggkkc', 'ckkkkkkc', 'cccccccc', '.c.c.c.c'],
+  };
+  const ROSTER = [
+    ['scout', 'Scout', 'search the code'], ['builder', 'Builder', 'do a multi-step task'],
+    ['planner', 'Planner', 'design a plan'], ['fetcher', 'Fetcher', 'read a URL'],
+    ['guide', 'Guide', 'Claude Code and API answers'], ['swarm', 'Swarm', 'fills your prompt, you decide'],
+  ];
+
+  // Small 2D sprites for the brand mark, feature list and pane sketch.
+  document.querySelectorAll('canvas[data-sprite]').forEach(cv => {
+    const art = SPRITES[cv.dataset.sprite]; if (!art) return;
+    const ctx = cv.getContext('2d');
+    art.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return; ctx.fillStyle = PALETTE[ch]; ctx.fillRect(x, y, 1, 1);
+    }));
+  });
+
+  // Grim: an original 12x12 mascot (a little hooded reaper with a scythe and ember eyes), four frames.
+  const GRIM_PAL = { R: '#3d3358', r: '#5c4f84', w: '#ece6d6', k: '#0f0c15', o: '#ff8c42', y: '#ffd23f', S: '#cfd6de', b: '#8a5a2b' };
+  const HALLOWEEN = document.documentElement.classList.contains('halloween');
+  // In the Halloween season Grim carries a lit jack-o'-lantern beside the scythe (rows 7-10, right edge).
+  if (HALLOWEEN) Object.assign(GRIM_PAL, { g: '#43aa8b', O: '#d9601a' });
+  const GRIM = HALLOWEEN
+    ? ['..RRRR..SSS.', '.RRRRRR.b.SS', '.RwwwwR.b..S', '.RowwoR.b...', '.RRwwRR.b...', 'RRRRRRR.w...', 'RrRRRRR.b...', 'RrRRRRR.b.g.', '.RrRRRR.bOoO', '.RRRRRR.byoy', 'R.R.R.R.bOyO', '........b...']
+    : ['..RRRR..SSS.', '.RRRRRR.b.SS', '.RwwwwR.b..S', '.RowwoR.b...', '.RRwwRR.b...', 'RRRRRRR.w...', 'RrRRRRR.b...', 'RrRRRRR.b...', '.RrRRRR.b...', '.RRRRRR.b...', 'R.R.R.R.b...', '........b...'];
+  const swap = (rows, fix) => rows.map((r, i) => fix[i] ?? r);
+  const GRIM_FRAMES = {
+    idle: GRIM,
+    flick: swap(GRIM, { 3: '.RywwyR.b...' }),
+    blink: swap(GRIM, { 3: '.RkwwkR.b...' }),
+    wave: swap(GRIM, { 3: 'wRowwoR.b...', 4: 'wRRwwRR.b...' }),
+  };
+  function drawGrim(cv, frame) {
+    const ctx = cv.getContext('2d'); ctx.clearRect(0, 0, 12, 12);
+    GRIM_FRAMES[frame].forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return; ctx.fillStyle = GRIM_PAL[ch]; ctx.fillRect(x, y, 1, 1);
+    }));
+  }
+  const grimEl = document.getElementById('grim'), palgrim = document.getElementById('palgrim');
+  const pal = document.getElementById('pal'), palsay = document.getElementById('palsay'), grimsay = document.getElementById('grimsay');
+  let waveUntil = reduceMotion() ? 0 : performance.now() + 2400, blinkAt = 0;
+  function reduceMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function grimTick(now) {
+    let f = Math.floor(now / 380) % 2 ? 'flick' : 'idle';
+    if (now < waveUntil) f = Math.floor(now / 200) % 2 ? 'wave' : 'idle';
+    if (now > blinkAt && now < blinkAt + 140) f = 'blink';
+    if (now > blinkAt + 3200) blinkAt = now + Math.random() * 1500;
+    drawGrim(grimEl, f); drawGrim(palgrim, f);
+    if (!reduceMotion()) requestAnimationFrame(grimTick);
+  }
+  drawGrim(grimEl, 'wave'); drawGrim(palgrim, 'idle'); drawGrim(document.getElementById('brandgrim'), 'idle');
+  if (!reduceMotion()) requestAnimationFrame(grimTick);
+  const hop = el => { el.classList.remove('hop'); void el.offsetWidth; el.classList.add('hop'); };
+  const TIPS = ['Esc always hands the keyboard back to the prompt.', 'Press / in the Grimoire to filter by name.', 'Enter on a finished agent opens its answer.', 'Swarm cards never launch on their own.', 'Run /grimling-tour for the full walk-through.'];
+  let tip = 0;
+  grimEl.addEventListener('click', () => { hop(grimEl); waveUntil = performance.now() + 1200; grimsay.textContent = TIPS[tip++ % TIPS.length]; });
+  palgrim.addEventListener('click', () => { hop(palgrim); palsay.textContent = TIPS[tip++ % TIPS.length]; });
+
+  // The companion follows you down the page and comments on each section.
+  const LINES = {
+    what: 'Every card here is a real agent type.', guide: 'Tip: Esc always hands the keyboard back.',
+    safety: 'I stop agents only when you say so.', install: 'One line and I am yours.', news: 'Fresh from the crypt: v0.1.0.',
+    roadmap: 'Arena fights are getting fancier.', faq: 'Ask away. Or click me for a tip.',
+  };
+  if (HALLOWEEN) {
+    grimsay.textContent = "Happy Halloween. I'm Grim, and I reap finished agents' answers for you.";
+    palsay.textContent = 'Scroll on, if you dare. I will come with you.';
+    Object.assign(LINES, {
+      safety: 'I stop agents only when you say so. Even on Halloween.', install: 'One line and I rise in your terminal.',
+      faq: 'Ask away. I only look scary.',
+    });
+    TIPS.push('Happy Halloween. Mind the bats, they are harmless.');
+    // Badge: "Happy Halloween · " goes in front in season; the markup itself is untouched.
+    const badge = document.querySelector('.hero .status');
+    const lead = badge && [...badge.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+    if (lead) lead.textContent = 'Happy Halloween · ' + lead.textContent;
+    decorateHero(document.querySelector('.hero'));
+  }
+
+  // Halloween hero dressing: a cobweb in the corner, low drifting fog and a few pixel bats.
+  // All of it sits behind the hero content and none of it exists outside the season.
+  function decorateHero(hero) {
+    if (!hero) return;
+    const fog = document.createElement('div'); fog.className = 'hw-fog'; fog.setAttribute('aria-hidden', 'true');
+    fog.innerHTML = '<span></span><span></span>'; hero.prepend(fog);
+    const ns = 'http://www.w3.org/2000/svg';
+    const web = document.createElementNS(ns, 'svg'); web.setAttribute('class', 'hw-web'); web.setAttribute('viewBox', '0 0 150 150'); web.setAttribute('aria-hidden', 'true');
+    let d = '';
+    const spokes = [0.02, 0.32, 0.62, 0.92, 1.22, 1.52].map(a => [150 - Math.sin(a + 0.05) * 150, Math.cos(a + 0.05) * 150]);
+    spokes.forEach(([x, y]) => { d += 'M150 0L' + x.toFixed(1) + ' ' + y.toFixed(1); });
+    [0.25, 0.45, 0.65, 0.85].forEach(f => {
+      spokes.forEach(([x, y], i) => {
+        const px = 150 + (x - 150) * f, py = y * f;
+        if (i === 0) { d += 'M' + px.toFixed(1) + ' ' + py.toFixed(1); return; }
+        const [qx, qy] = spokes[i - 1]; const mx = 150 + ((qx + x) / 2 - 150) * f * 0.86, my = ((qy + y) / 2) * f * 0.86;
+        d += 'Q' + mx.toFixed(1) + ' ' + my.toFixed(1) + ' ' + px.toFixed(1) + ' ' + py.toFixed(1);
+      });
+    });
+    web.innerHTML = '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="1"/>' +
+      '<g class="spider"><path d="M104 0V58" stroke="currentColor" stroke-width="1"/>' +
+      '<g fill="var(--bat)" shape-rendering="crispEdges"><rect x="101" y="58" width="6" height="6"/><rect x="102" y="64" width="4" height="3"/>' +
+      '<rect x="97" y="59" width="3" height="1"/><rect x="108" y="59" width="3" height="1"/><rect x="97" y="62" width="3" height="1"/><rect x="108" y="62" width="3" height="1"/>' +
+      '<rect x="96" y="65" width="3" height="1"/><rect x="109" y="65" width="3" height="1"/></g>' +
+      '<rect x="102" y="60" width="1" height="1" fill="var(--pumpkin)"/><rect x="105" y="60" width="1" height="1" fill="var(--pumpkin)"/></g>';
+    hero.prepend(web);
+    if (!reduceMotion()) startBats(hero);
+  }
+
+  function startBats(hero) {
+    const cv = document.createElement('canvas'); cv.className = 'hw-bats'; cv.setAttribute('aria-hidden', 'true'); hero.prepend(cv);
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    const BAT = [
+      ['kk.......kk', 'kkk.k.k.kkk', '.kkkkkkkkk.', '...kkykk...', '....k.k....'],
+      ['....k.k....', '...kkkkk...', '.kkkkykkkk.', 'kk.kkkkk.kk', 'k.........k'],
+    ];
+    let w = 0, h = 0, dpr = 1, color = '#2a2140', eye = '#ff8c42';
+    const readColors = () => {
+      const cs = getComputedStyle(document.documentElement);
+      color = cs.getPropertyValue('--bat').trim() || color; eye = cs.getPropertyValue('--pumpkin').trim() || eye;
+    };
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2); w = hero.clientWidth; h = hero.clientHeight;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); readColors();
+    };
+    resize(); window.addEventListener('resize', resize);
+    const dark = window.matchMedia('(prefers-color-scheme: dark)');
+    if (dark.addEventListener) dark.addEventListener('change', readColors);
+    if ('MutationObserver' in window) new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const bats = [0, 1, 2, 3].map(i => ({ x: Math.random(), y: 0.06 + i * 0.07 + Math.random() * 0.05, v: 0.03 + Math.random() * 0.025,
+      ph: Math.random() * 6, px: i % 2 ? 3 : 2, dir: i === 2 ? -1 : 1 }));
+    let visible = true, running = false, last = 0;
+    function tick(now) {
+      if (!visible || document.hidden) { running = false; return; }
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 0; last = now;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+      bats.forEach(b => {
+        b.x += b.v * dt * b.dir; if (b.x > 1.08) b.x = -0.08; if (b.x < -0.08) b.x = 1.08;
+        const art = BAT[Math.floor(now / 140 + b.ph) % 2];
+        const bx = Math.round(b.x * w), by = Math.round(b.y * h + Math.sin(now / 600 + b.ph) * 14);
+        art.forEach((row, y) => [...row].forEach((ch, x) => {
+          if (ch === '.') return; ctx.fillStyle = ch === 'y' ? eye : color;
+          ctx.fillRect(bx + (b.dir < 0 ? 10 - x : x) * b.px, by + y * b.px, b.px, b.px);
+        }));
+      });
+      requestAnimationFrame(tick);
+    }
+    const go = () => { if (!running && visible && !document.hidden) { running = true; last = 0; requestAnimationFrame(tick); } };
+    document.addEventListener('visibilitychange', go);
+    if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; go(); }).observe(hero);
+    go();
+  }
+  if ('IntersectionObserver' in window) {
+    const heroObs = new IntersectionObserver(es => es.forEach(e => pal.classList.toggle('off', e.isIntersecting)), { threshold: 0.15 });
+    heroObs.observe(document.querySelector('.hero'));
+    const secObs = new IntersectionObserver(es => es.forEach(e => {
+      if (!e.isIntersecting) return; const line = LINES[e.target.id];
+      if (line && palsay.textContent !== line) { palsay.textContent = line; hop(palgrim); }
+    }), { rootMargin: '-45% 0px -45% 0px' });
+    Object.keys(LINES).forEach(id => { const el = document.getElementById(id); if (el) secObs.observe(el); });
+  }
+
+  // The pane sketch runs on its own: tasks type in, agents start, tick and finish.
+  const typed = document.getElementById('typed'), sumlbl = document.getElementById('sumlbl'), runs = document.getElementById('runs');
+  const JOBS = [
+    ['Scout', 'find where the auth token is refreshed'], ['Plan', 'steps to move the cache to Redis'],
+    ['Fetch', 'read the release notes for v2.3'], ['Build', 'add retries to the upload client'],
+  ];
+  const live = [{ who: 'Scout', task: 'auth token refresh', s: 42, done: false }, { who: 'Plan', task: 'migration steps', s: 130, done: true }];
+  const fmt = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  function paint() {
+    runs.innerHTML = live.slice(0, 3).map(r =>
+      '<div class="run"><span class="' + (r.done ? 'ok">●' : 'warn">◉') + '</span><span>' + r.who + ' · ' + r.task + (r.done ? ', answer ready' : '') + '</span><span class="dim">' + fmt(r.s) + '</span></div>').join('');
+  }
+  if (!reduceMotion()) {
+    let j = 0;
+    const typeJob = () => {
+      const [who, task] = JOBS[j++ % JOBS.length]; sumlbl.textContent = 'summon · ' + who; typed.textContent = ''; let i = 0;
+      const step = setInterval(() => {
+        typed.textContent = task.slice(0, ++i);
+        if (i >= task.length) {
+          clearInterval(step);
+          setTimeout(() => {
+            live.unshift({ who, task: task.split(' ').slice(0, 3).join(' '), s: 0, done: false }); typed.textContent = ''; paint();
+            setTimeout(typeJob, 2600);
+          }, 700);
+        }
+      }, 55);
+    };
+    setTimeout(typeJob, 1500);
+    setInterval(() => {
+      live.forEach(r => { if (!r.done) { r.s++; if (r.s > 6 + Math.random() * 30 && Math.random() < 0.08) r.done = true; } });
+      if (live.length > 3) live.length = 3;
+      paint();
+    }, 1000);
+    const bars = document.querySelectorAll('.term .m u');
+    setInterval(() => bars.forEach(b => {
+      const v = Math.max(8, Math.min(92, parseFloat(b.style.getPropertyValue('--v')) + (Math.random() * 8 - 3)));
+      b.style.setProperty('--v', v.toFixed(0) + '%'); b.style.setProperty('--c', v >= 85 ? '#ff5d73' : v >= 60 ? '#ffd23f' : '#43aa8b');
+      b.nextSibling.textContent = ' ' + v.toFixed(0) + '%';
+    }), 2200);
+  }
+
+  const stage = document.getElementById('grimoire');
+  const tag = document.getElementById('tag');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const setTag = i => { const r = ROSTER[i]; tag.innerHTML = '<b>' + r[1] + '</b> · ' + r[2]; };
+
+  function flat() {
+    // Fallback without WebGL: the roster drawn as a ring of flat sprites.
+    const ctx = stage.getContext('2d'); const S = 320; stage.width = S; stage.height = S;
+    ROSTER.forEach((r, i) => {
+      const a = (i / ROSTER.length) * Math.PI * 2 - Math.PI / 2;
+      const cx = S / 2 + Math.cos(a) * 110, cy = S / 2 + Math.sin(a) * 110;
+      SPRITES[r[0]].forEach((row, y) => [...row].forEach((ch, x) => {
+        if (ch === '.') return; ctx.fillStyle = PALETTE[ch]; ctx.fillRect(cx - 20 + x * 5, cy - 20 + y * 5, 5, 5);
+      }));
+    });
+  }
+
+  if (!window.THREE) { flat(); return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: stage, antialias: true, alpha: true }); }
+  catch (e) { flat(); return; }
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.position.set(0, 4.2, 15);
+  camera.lookAt(0, 0.6, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a2f55, 0.85));
+  const key = new THREE.DirectionalLight(0xffffff, 0.75); key.position.set(4, 8, 6); scene.add(key);
+  const glow = new THREE.PointLight(0x2ec4b6, 1.4, 12); glow.position.set(0, 1.2, 0); scene.add(glow);
+
+  // The open book at the centre: two tilted page slabs over a cover.
+  const book = new THREE.Group();
+  const cover = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.14, 2.5), new THREE.MeshStandardMaterial({ color: 0x5b3a8c, roughness: 0.7 }));
+  book.add(cover);
+  const pageMat = new THREE.MeshStandardMaterial({ color: 0xf3ecd9, roughness: 0.9, emissive: 0x2ec4b6, emissiveIntensity: 0.08 });
+  [-1, 1].forEach(s => {
+    const page = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.12, 2.3), pageMat);
+    page.position.set(s * 0.86, 0.16, 0); page.rotation.z = s * -0.12; book.add(page);
+  });
+  book.position.y = -0.6; scene.add(book);
+
+  // Motes rising from the book.
+  const motes = new THREE.Group();
+  const moteGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.Mesh(moteGeo, new THREE.MeshBasicMaterial({ color: i % 3 ? (HALLOWEEN && i % 2 ? 0xff8c42 : 0x2ec4b6) : 0xffd23f }));
+    m.userData = { r: Math.random() * 1.3, a: Math.random() * Math.PI * 2, s: 0.4 + Math.random() * 0.8, o: Math.random() * 4 };
+    motes.add(m);
+  }
+  scene.add(motes);
+
+  // Halloween: voxel jack-o'-lanterns and two candles around the book, lit by a flickering ember light.
+  const seasonal = [];
+  if (HALLOWEEN) {
+    const vox = new THREE.BoxGeometry(1, 1, 1);
+    const FACE = new Set(['-2,3', '-1,3', '1,3', '2,3', '0,2', '-2,1', '-1,0', '0,1', '1,0', '2,1']);
+    function pumpkin(x, y, z, s, ry) {
+      const body = [], face = [], front = {};
+      for (let vx = -3; vx <= 3; vx++) for (let vy = 0; vy <= 4; vy++) for (let vz = -3; vz <= 3; vz++) {
+        if ((vx / 3.4) ** 2 + ((vy - 2) / 2.6) ** 2 + (vz / 3.4) ** 2 > 1) continue;
+        body.push([vx, vy, vz]); const k = vx + ',' + vy; front[k] = Math.max(front[k] ?? -9, vz);
+      }
+      const shell = body.filter(([vx, vy, vz]) => !(FACE.has(vx + ',' + vy) && vz === front[vx + ',' + vy]));
+      body.forEach(([vx, vy, vz]) => { if (FACE.has(vx + ',' + vy) && vz === front[vx + ',' + vy]) face.push([vx, vy, vz]); });
+      const g = new THREE.Group();
+      const mtx = new THREE.Matrix4(), col = new THREE.Color();
+      const shellMesh = new THREE.InstancedMesh(vox, new THREE.MeshStandardMaterial({ roughness: 0.6 }), shell.length);
+      shell.forEach(([vx, vy, vz], n) => {
+        mtx.makeTranslation(vx, vy, vz); shellMesh.setMatrixAt(n, mtx);
+        col.set(Math.abs(vx) % 2 ? '#e8742a' : '#ff8c42'); shellMesh.setColorAt(n, col);
+      });
+      const faceMesh = new THREE.InstancedMesh(vox, new THREE.MeshBasicMaterial({ color: 0xffd23f }), face.length);
+      face.forEach(([vx, vy, vz], n) => { mtx.makeTranslation(vx, vy, vz + 0.02); faceMesh.setMatrixAt(n, mtx); });
+      const stem = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshStandardMaterial({ color: 0x43aa8b, roughness: 0.8 }));
+      stem.position.set(0, 5.4, 0); stem.rotation.z = 0.2;
+      g.add(shellMesh, faceMesh, stem); g.scale.setScalar(s); g.position.set(x, y, z); g.rotation.y = ry; scene.add(g);
+      seasonal.push({ obj: g, base: y, phase: x });
+    }
+    pumpkin(-2.7, -1.05, 1.5, 0.15, 0.35);
+    pumpkin(2.8, -1.0, 1.0, 0.12, -0.4);
+    pumpkin(2.1, -0.95, -1.7, 0.09, -0.2);
+    const candleMat = new THREE.MeshStandardMaterial({ color: 0xece6d6, roughness: 0.8 });
+    const flames = [];
+    [[-2.0, -0.9], [1.6, -1.1]].forEach(([cx, cz], i) => {
+      const hgt = i ? 0.55 : 0.8;
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, hgt, 0.22), candleMat); c.position.set(cx, -0.6 + hgt / 2, cz); scene.add(c);
+      const f = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.12), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      f.position.set(cx, -0.6 + hgt + 0.13, cz); scene.add(f); flames.push({ f, i });
+    });
+    const ember = new THREE.PointLight(0xff8c42, 1.3, 10); ember.position.set(0, 0.2, 1.6); scene.add(ember);
+    seasonal.tick = t => {
+      seasonal.forEach(p => { p.obj.position.y = p.base + Math.abs(Math.sin(t * 1.3 + p.phase)) * 0.06; });
+      flames.forEach(({ f, i }) => { f.scale.y = 1 + Math.sin(t * 13 + i * 2) * 0.18 + Math.sin(t * 7.3 + i) * 0.12; });
+      ember.intensity = 1.1 + Math.sin(t * 9) * 0.15 + Math.sin(t * 23.7) * 0.1;
+    };
+  }
+
+  // Each sprite becomes a voxel creature: one cube per pixel, coloured per instance.
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const ring = new THREE.Group(); scene.add(ring);
+  const RADIUS = 5.4;
+  const creatures = ROSTER.map((r, i) => {
+    const art = SPRITES[r[0]]; const cells = [];
+    art.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') cells.push([x, y, ch]); }));
+    const mesh = new THREE.InstancedMesh(cube, new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05 }), cells.length);
+    const mtx = new THREE.Matrix4(); const col = new THREE.Color();
+    cells.forEach(([x, y, ch], n) => {
+      mtx.makeTranslation(x - 3.5, 3.5 - y, 0); mesh.setMatrixAt(n, mtx);
+      col.set(PALETTE[ch]); mesh.setColorAt(n, col);
+    });
+    const holder = new THREE.Group(); holder.add(mesh); holder.scale.setScalar(0.2);
+    const a = (i / ROSTER.length) * Math.PI * 2;
+    holder.position.set(Math.sin(a) * RADIUS, 0.9, Math.cos(a) * RADIUS);
+    ring.add(holder);
+    return { holder, a, phase: i * 0.9 };
+  });
+
+  function size() {
+    const w = stage.clientWidth || 400, h = stage.clientHeight || 400;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', size); size();
+
+  let px = 0, py = 0;
+  stage.addEventListener('pointermove', e => {
+    const b = stage.getBoundingClientRect();
+    px = ((e.clientX - b.left) / b.width - 0.5) * 2; py = ((e.clientY - b.top) / b.height - 0.5) * 2;
+  });
+  stage.addEventListener('pointerleave', () => { px = 0; py = 0; });
+
+  let front = -1; const t0 = performance.now();
+  function frame(now) {
+    const t = reduce ? 0 : (now - t0) / 1000;
+    ring.rotation.y = -t * 0.28;
+    let best = -Infinity, bi = 0;
+    creatures.forEach((c, i) => {
+      const world = c.a + ring.rotation.y;
+      const z = Math.cos(world);
+      if (z > best) { best = z; bi = i; }
+      c.holder.position.y = 0.9 + Math.sin(t * 1.6 + c.phase) * 0.22;
+      c.holder.rotation.y = -ring.rotation.y + Math.sin(t * 0.8 + c.phase) * 0.25;
+      const s = 0.2 + Math.max(0, z) * 0.06; c.holder.scale.setScalar(s);
+    });
+    if (bi !== front) { front = bi; setTag(bi); }
+    motes.children.forEach(m => {
+      const d = m.userData; const life = ((t * d.s + d.o) % 4) / 4;
+      m.position.set(Math.cos(d.a + t * 0.5) * d.r, -0.4 + life * 3.6, Math.sin(d.a + t * 0.5) * d.r);
+      m.scale.setScalar(1 - life);
+    });
+    glow.intensity = 1.2 + Math.sin(t * 2) * 0.3;
+    if (seasonal.tick) seasonal.tick(t);
+    camera.position.x += (px * 2.2 - camera.position.x) * 0.05;
+    camera.position.y += (4.2 - py * 1.5 - camera.position.y) * 0.05;
+    camera.lookAt(0, 0.6, 0);
+    renderer.render(scene, camera);
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>

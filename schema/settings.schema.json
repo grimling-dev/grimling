@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/grimling-dev/grimling/schema/settings.schema.json",
+  "title": "Grimling settings",
+  "description": "~/.claude/grimling/settings.json. Every key is optional and has a default; a bad value keeps its default and shows as a problem in the pane (footer and the Keys tab). Keep in step with hooks/settings.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How clock times show: plan-limit resets and kill-by times.",
+      "properties": {
+        "zone": { "type": "string", "default": "system", "description": "\"system\" or an IANA time zone such as \"Europe/Berlin\"." },
+        "clock": { "enum": ["12h", "24h"], "default": "24h" },
+        "showUtc": { "type": "boolean", "default": false, "description": "Show the UTC time first: 03:15Z (23:15 EDT)." }
+      }
+    },
+    "grim": {
+      "description": "Grim, the mascot. The v0.4 form true/false still works as grim.enabled.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "seconds": { "type": "integer", "minimum": 2, "maximum": 30, "default": 8, "description": "How long Grim stays up." },
+            "lines": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Your own lines per event (empty: the built-in ones). Placeholders: {name} {type} {duration} {task}.",
+              "properties": {
+                "done": { "$ref": "#/definitions/grimLines" },
+                "failed": { "$ref": "#/definitions/grimLines" },
+                "killed": { "$ref": "#/definitions/grimLines" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "notify": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What happens when an agent finishes, fails or is stopped. Grim has its own switch (grim.enabled).",
+      "properties": {
+        "toast": { "type": "boolean", "default": true },
+        "desktop": { "type": "boolean", "default": false, "description": "Also send a desktop notification through your notification channel." },
+        "events": { "type": "array", "maxItems": 3, "items": { "enum": ["done", "failed", "killed"] }, "default": ["done", "failed", "killed"] }
+      }
+    },
+    "cards": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Card sources, an earlier one winning a shared name: built-ins, the mod's own agents, each pack, project agent files, user agent files. A project file may set it.",
+      "properties": {
+        "builtins": { "type": "boolean", "default": true, "description": "Scout, Builder, Planner, Fetcher and Guide." },
+        "pack": { "type": "boolean", "default": true, "description": "The agents the mod ships (grimling:<name>)." },
+        "user": { "type": "boolean", "default": true, "description": "Agent files in ~/.claude/agents." },
+        "project": { "type": "boolean", "default": true, "description": "The project's .claude/agents and .claude/grimling/templates." },
+        "packs": {
+          "type": "array",
+          "maxItems": 20,
+          "default": [],
+          "description": "Agent packs: a folder with agents/*.md, optional agents/dex.json and templates/*.md. Its cards show as <ns>:<name>; ns defaults to the folder's .claude-plugin/plugin.json name. Enable the folder as a plugin too, or its cards cannot start. A relative path is read from the project folder.",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": { "path": { "type": "string", "minLength": 1 }, "ns": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } }
+          }
+        },
+        "hide": { "type": "array", "items": { "type": "string", "maxLength": 100 }, "default": [], "description": "Card ids (scout, swarm, agent-<name>) or agent types to leave out." }
+      }
+    },
+    "templates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Prompt templates: cards that fill the prompt instead of starting an agent. A project file may set it; a project's templates are tagged proj.",
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 60, "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "default": ["swarm"],
+          "description": "Template ids that get a card. <id>.md is looked up in the mod's templates/, each pack's templates/, ~/.claude/grimling/templates/ and the project's .claude/grimling/templates/; the last found wins."
+        }
+      }
+    },
+    "pods": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pod status files (not part of the public v0.1.0).",
+      "properties": {
+        "enabled": { "enum": ["auto", "on", "off"], "default": "auto", "description": "auto: the Pods tab shows only while a status file is read." },
+        "files": { "type": "array", "maxItems": 20, "items": { "type": "string" }, "default": ["~/.claude/grimling/pods/*.json"], "description": "Paths; a * in the file name matches." },
+        "staleAfterS": { "type": ["integer", "null"], "minimum": 1, "maximum": 86400, "default": null, "description": "Not used yet." }
+      }
+    },
+    "arena": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The Arena. Only your own settings.json may set these; a project file cannot.",
+      "properties": {
+        "model": { "type": "string", "default": "haiku", "description": "The model both fighters run on: an alias (haiku, sonnet, opus) or a model id." },
+        "puzzlesFile": { "type": ["string", "null"], "default": null, "description": "A JSON list of { id, title, question, answer, accept? } added to the built-in puzzles (same id replaces). ~ is your home; a relative path is read from ~/.claude/grimling. A project file cannot set it." }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The run log under ~/.claude/grimling/runs/ (one file a day) and debug.log. A project file cannot set it.",
+      "properties": {
+        "runs": {
+          "enum": ["full", "redacted", "meta", "off"],
+          "default": "redacted",
+          "description": "full: prompts and answers as sent (capped); redacted: the same with keys and tokens replaced by [redacted]; meta: no prompt, answer or task text; off: nothing written."
+        },
+        "promptChars": { "type": "integer", "minimum": 0, "maximum": 100000, "default": 6000 },
+        "answerChars": { "type": "integer", "minimum": 0, "maximum": 100000, "default": 1500 },
+        "maxBytes": { "type": "integer", "minimum": 65536, "maximum": 3145728, "default": 2097152, "description": "Size of one log file before the next part starts." },
+        "keepDays": { "type": "integer", "minimum": 1, "maximum": 3650, "default": 30, "description": "Older day files are no longer read." },
+        "redact": { "type": "array", "maxItems": 50, "items": { "type": "string", "minLength": 1, "maxLength": 300 }, "default": [], "description": "Extra regular expressions to redact, on top of the built-in list." },
+        "debug": { "enum": ["all", "errors", "off"], "default": "errors", "description": "What goes to debug.log: every press and focus move, only errors, or nothing." }
+      }
+    },
+    "meter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "sessionsFile": { "type": ["string", "null"], "default": null, "description": "A file holding {\"n\": <active sessions>} for the meter; off by default." } }
+    },
+    "agentDex": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Read by the agent-dex skill, not by the pane. A project file cannot set it.",
+      "properties": {
+        "rulesBlock": { "type": ["string", "null"], "maxLength": 4000, "default": null, "description": "The rules block the skill ends every saved agent with. null: the skill's generic rules." },
+        "afterSave": { "type": ["string", "null"], "maxLength": 4000, "default": null, "description": "One extra step the skill does after saving, in plain words (for example: add a line to a notes file). null: no extra step." }
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "default": "grimling-dev/grimling", "description": "GitHub owner/repo that /grimling-feedback opens an issue on." },
+        "nudge": { "type": "boolean", "default": true, "description": "One feedback hint after the 5th launch." }
+      }
+    },
+    "stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "x / STOP on running cards the deck launched (asks Stop / Keep first, then TaskStop through the permission check). false hides the button." }
+      }
+    }
+  },
+  "definitions": {
+    "grimLines": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 120 }, "default": [] }
+  }
+}

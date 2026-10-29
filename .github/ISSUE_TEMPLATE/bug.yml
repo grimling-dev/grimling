@@ -1,0 +1,27 @@
+name: Bug report
+description: Something in Grimling is broken. /grimling-feedback fills this form for you.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. `/grimling-feedback` in Claude Code fills both fields below and shows you exactly what is sent first.
+        Please do not paste prompts, answers, file paths, keys or anything from `~/.claude/grimling/` unless you want them public.
+  # The ids `what` and `diagnostics` are the query parameters /grimling-feedback fills (hooks/feedback.ts).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead. For a failed agent, the card, its type and the first error line.
+      placeholder: I opened /grimling and the Grimoire showed only the built-in cards.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Grimling and Claude Code versions, OS, pane width, card counts and the settings keys with problems. No paths, prompts or answers.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,54 @@
+# CI for the public Grimling repo. No secrets: nothing here needs an API key,
+# and none must ever be added (validate and test run offline).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    # macOS is untested so far (CHANGELOG, Known limitations): its job reports
+    # but does not fail the run.
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    steps:
+      # Actions are pinned to full commit SHAs (tags can move); the comment
+      # names the release.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # VERIFY: package name, and that `plugin validate` / `plugin test` run
+      # without signing in. If they need auth, drop these three steps and keep
+      # the manual checklist in CONTRIBUTING.md instead.
+      # Pinned to the version the mod is tested on (README, Requirements).
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.312
+
+      - name: claude plugin validate
+        run: claude plugin validate .
+
+      - name: claude plugin test
+        run: claude plugin test .
+
+      - name: Scrub (secrets and home-folder paths)
+        if: runner.os == 'Linux'
+        run: node .github/scripts/scrub.mjs --patterns .github/scrub-patterns.txt
+
+      - name: Site matches CHANGELOG and plugin.json
+        if: runner.os == 'Linux'
+        run: node .github/scripts/sync-site.mjs --check --strict

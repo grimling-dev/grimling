@@ -1,0 +1,14 @@
+{
+  "name": "grimling",
+  "version": "0.1.0",
+  "description": "Grimling: summon, watch and message subagents from a pixel-art card grid; a Grimoire of agent types, swarm launch, Arena and a usage meter. Unofficial community mod for Claude Code.",
+  "author": {
+    "name": "Light House Automations LLC",
+    "url": "https://github.com/grimling-dev"
+  },
+  "homepage": "https://github.com/grimling-dev/grimling",
+  "repository": "https://github.com/grimling-dev/grimling",
+  "license": "MIT",
+  "keywords": ["subagents", "agents", "mod", "pane", "pixel-art", "grimoire", "arena", "swarm", "usage-meter"],
+  "types": "./types/index.d.ts"
+}
