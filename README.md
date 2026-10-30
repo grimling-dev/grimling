@@ -1,5 +1,9 @@
 # Grimling
 
+[![License: MIT](https://img.shields.io/github/license/grimling-dev/grimling)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/grimling-dev/grimling)](https://github.com/grimling-dev/grimling/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/grimling-dev/grimling/ci.yml?branch=main&label=CI)](https://github.com/grimling-dev/grimling/actions/workflows/ci.yml)
+
 A Claude Code mod: a pane of pixel-art agent cards beside the chat. Pick a card, type the task, press Enter. Watch the agent work, message it, read its answer and hand it to your prompt.
 
 Unofficial community mod for Claude Code, not affiliated with Anthropic.
@@ -32,14 +36,14 @@ Then run `/reload-plugins` (or start a new session) and type `/grimling`. Update
 ## What it does
 
 - **Tabs.** Deck, Flow, Table and Keys across the top; Mermaid, Help and Arena on the bottom row. Tab, arrows or the tab letter move around; Esc hands the keyboard back to the prompt.
-- **The Grimoire.** A filterable grid of agent cards: the built-in agent types (Scout, Builder, Planner, Fetcher, Guide), every agent file in `~/.claude/agents` and in the project's `.claude/agents`, and agent packs you add in `cards.packs`. Agents without art get a generated pixel creature. Category chips and a `/` name filter.
+- **The Grimoire.** A filterable grid of agent cards: the built-in agent types (Scout, Builder, Planner, Fetcher, Guide), every agent file in `~/.claude/agents` and in the project's `.claude/agents`, and agent packs you add in `cards.packs`. Agents without art get a generated pixel creature. Category chips and a `/` name filter. Cards shrink (full, compact, mini) so the whole deck fits the pane; `z` cycles the size.
 - **Launch in one line.** Pick a card, type the task, Enter starts it. A refused launch keeps the task in the box. Recent runs can be put back in the launch box to run again.
 - **Template cards.** Swarm (and any template in `templates.enabled`) only fills a request into your prompt, so you and the main session decide what runs.
 - **Workflows card.** Opens the [Claude Workflow Library](https://www.claudeworkflows.org/), a community index of Claude workflows run by the r/ClaudeAI moderators, in your browser. Grimling only links to it (unofficial, not affiliated); `cards.hide: ["workflows"]` hides it.
-- **Live agent cards.** Running agents get their own cards: Enter, type, Enter sends a message. Finished ones show their answer; Enter adds it after your prompt draft, `c` copies it.
+- **Live agent cards.** Running agents get their own cards: Enter, type, Enter sends a message. Finished ones show their answer; Enter adds it after your prompt draft, `c` copies it. `v` opens the agent's transcript in Claude Code's own main view (`v` again goes back).
 - **Stop button.** `x` or STOP on a running agent the deck launched opens a Stop / Keep confirm (Keep is the default). The stop goes through Claude Code's permission check. `stop.enabled: false` hides it.
 - **Flow, Table and Mermaid.** Who spawned whom, every run as a table, and the agent graph copied as a Mermaid diagram.
-- **Meter.** Your status line as bars: context window, plan limits with reset times, cost, session time and model. Green, yellow from 60%, red from 85%.
+- **Meter.** Your status line as bars: context window, plan limits with reset times and, while a limit is burning, when it runs out at the recent rate ("limit in ~40m"), cost, session time and model. It updates when Claude Code measures the session, not on a timer. Green, yellow from 60%, red from 85%.
 - **Grim, the mascot.** Pops up with a speech bubble when an agent finishes, fails or is stopped. Your own lines, or turn it off with `grim.enabled: false`.
 - **Arena lite (early).** Pit two cards against a question with a known answer. Both run on haiku (`arena.model`); the right answer wins, then the faster, then fewer tokens. Wins, losses and a rating per card are kept; `s` copies a results card.
 - **Run log and the agent-dex skill.** Launches, answers, stops and scored fights are logged on your computer, redacted by default. The bundled `agent-dex` skill ("collect agent types") proposes reusable agent types from that log and saves only the ones you approve.
@@ -84,7 +88,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). In short: load a clone with `claude --pl
 
 ## Roadmap
 
-Now (v0.2.0, early access): the Workflows card that opens the community Claude Workflow Library; clearer live cards; tests pass on Windows, Linux and macOS in CI; the GPU swarm setup guide; feedback through `/grimling-feedback`. Next: a demo video, more agent packs, a live try on macOS, Arena tuning. Later: save a community workflow as your own recipe card, credited and linked to its author; a prompt library with `@` shortcuts, saved Mermaid diagrams, a "needs you" queue and richer notification rules, per-agent cost bars, one pane for every terminal. Order can change.
+Now (v0.3.0, early access): arrow keys around the pane, cards that shrink to fit the whole deck, transcript peek (`v`), a live meter with a "limit in ~40m" forecast, waiting badges with a Grim popup, the Workflows card, tests passing on Windows, Linux and macOS in CI, the GPU swarm setup guide, feedback through `/grimling-feedback`. Next: a demo video, more agent packs, a live try on macOS, Arena tuning. Later: save a community workflow as your own recipe card, credited and linked to its author; a prompt library with `@` shortcuts, saved Mermaid diagrams, a full "needs you" queue with permission asks and richer notification rules, per-agent cost bars, one pane for every terminal. Order can change.
 
 ## License and contact
 

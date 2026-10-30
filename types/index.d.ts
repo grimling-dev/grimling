@@ -45,6 +45,8 @@ export type TrackedAgent = {
   endedAt?: number
   // Polls in a row this agent was missing from agent.list(); at 5 it is 'gone'.
   missing?: number
+  // When this agent's current wait began (status 'waiting'); unset otherwise.
+  waitSince?: number
 }
 
 // One past spawn from the run log, for the deck's recent list.
@@ -57,7 +59,9 @@ export type Meter = {
   ctxTokens?: number
   window: number
   // reset: the window reset and the host has not reported the new one yet (0%).
-  limits: { kind: string; pct: number; resetsAt?: string; reset?: boolean }[]
+  // eta: when (epoch ms) the window is forecast to reach 100% at the recent
+  // burn rate; etaFrom: when the percentage last moved (the forecast runs from there).
+  limits: { kind: string; pct: number; resetsAt?: string; reset?: boolean; eta?: number; etaFrom?: number }[]
   startedAt: number
   sessions: number
 }
@@ -93,7 +97,7 @@ export type GrimSay = {
   text: string
   at: number
   until: number
-  event: 'done' | 'failed' | 'killed' | 'thanks'
+  event: 'done' | 'failed' | 'killed' | 'thanks' | 'waiting'
   report?: string
 }
 
@@ -114,10 +118,12 @@ export type SetupDraft = { answers: Record<string, string | boolean>; base: stri
 // DEFAULTS; schema/settings.schema.json for editors).
 export type LogMode = 'full' | 'redacted' | 'meta' | 'off'
 export type GrimEvent = 'done' | 'failed' | 'killed'
+export type CardSizeMode = 'auto' | 'full' | 'compact' | 'mini'
 export type Settings = {
   time: { zone: string; clock: '12h' | '24h'; showUtc: boolean }
   // Empty `lines` lists use the built-in lines.
-  grim: { enabled: boolean; seconds: number; lines: Record<GrimEvent, string[]> }
+  // waiting: Grim pops up once when an agent starts waiting (built-in lines only).
+  grim: { enabled: boolean; seconds: number; waiting: boolean; lines: Record<GrimEvent, string[]> }
   notify: { toast: boolean; desktop: boolean; events: GrimEvent[] }
   cards: {
     builtins: boolean
@@ -126,6 +132,8 @@ export type Settings = {
     project: boolean
     packs: { path: string; ns?: string }[]
     hide: string[]
+    // Grimoire card size: auto picks the largest at which the whole deck fits.
+    size: CardSizeMode
   }
   templates: { enabled: string[] }
   pods: { enabled: 'auto' | 'on' | 'off'; files: string[]; staleAfterS: number | null }
@@ -144,6 +152,8 @@ export type Settings = {
   feedback: { repo: string; nudge: boolean }
   // The stop button on running cards the deck launched.
   stop: { enabled: boolean }
+  // Arrow keys move the focus ring around the pane (false: as before).
+  keys: { arrows: boolean }
 }
 
 // Inside `declare module 'claude-code'` the name Settings is the engine's own
@@ -207,6 +217,8 @@ declare module 'claude-code' {
       nudge: boolean
       launched: Shaped<string[]>
       stops: Shaped<Record<string, StopState>>
+      // The session's card size from z (null: cards.size).
+      cardSize: CardSizeMode | null
     }
   }
 }

@@ -82,7 +82,7 @@ export function resetTime(iso: string, t: TimeSettings): string {
   return Number.isFinite(at) ? fmtTime(at, t, { weekday: true }) : ''
 }
 
-export type Limit = { kind: string; pct: number; resetsAt?: string; reset?: boolean }
+export type Limit = { kind: string; pct: number; resetsAt?: string; reset?: boolean; eta?: number; etaFrom?: number }
 
 // Plan limits across a reset: the host may drop a window from
 // its reading once that window resets, until the next response reports it.

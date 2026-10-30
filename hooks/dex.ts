@@ -163,3 +163,32 @@ export function cardForType<T extends { type?: string }>(entries: T[], type: str
 export function isHidden(d: { id: string; type?: string }, hide: string[]): boolean {
   return hide.includes(d.id) || (!!d.type && hide.includes(d.type))
 }
+
+// A sprite at half height (compact cards): each pair of pixel rows becomes
+// one, a pixel taking the upper one's colour, or the lower one's where the
+// upper is clear. Drawn in half blocks, 8x8 art fills two text rows.
+export function halfHeight(px: string[]): string[] {
+  const out: string[] = []
+  for (let r = 0; r < px.length; r += 2) {
+    const top = px[r] ?? ''
+    const low = px[r + 1] ?? ''
+    const w = Math.max(top.length, low.length)
+    let row = ''
+    for (let i = 0; i < w; i += 1) {
+      const t = top[i] ?? '.'
+      row += t !== '.' ? t : (low[i] ?? '.')
+    }
+    out.push(row)
+  }
+  return out
+}
+
+// A sprite's main colour (mini cards): its most used palette colour, outline
+// black and white eyes counted only when nothing else is drawn.
+export function mainColour(px: string[], pal: Record<string, string>): string | undefined {
+  const count = new Map<string, number>()
+  for (const ch of px.join('')) if (pal[ch]) count.set(ch, (count.get(ch) ?? 0) + 1)
+  const ranked = [...count.entries()].sort((x, y) => y[1] - x[1]).map(([ch]) => ch)
+  const ch = ranked.find(c => c !== 'k' && c !== 'w') ?? ranked[0]
+  return ch ? pal[ch] : undefined
+}

@@ -71,6 +71,18 @@ test('stop.enabled: on by default; false turns the stop button off; not a boolea
   expect(bad.problems.map(p => p.path)).toEqual(['stop.enabled'])
 })
 
+test('grim.waiting: on by default; false turns the waiting popup off; not a boolean keeps the default', () => {
+  expect(parseSettings(undefined).value.grim.waiting).toBe(true)
+  expect(parseSettings({ grim: { waiting: false } }).value.grim.waiting).toBe(false)
+  const bad = parseSettings({ grim: { waiting: 'yes' } })
+  expect(bad.value.grim.waiting).toBe(true)
+  expect(bad.problems.map(p => p.path)).toEqual(['grim.waiting'])
+  // The legacy {"grim": false} still turns Grim off as a whole; waiting keeps its default.
+  const legacy = parseSettings({ grim: false })
+  expect(legacy.value.grim.enabled).toBe(false)
+  expect(legacy.value.grim.waiting).toBe(true)
+})
+
 test('a bad field keeps its default and names a problem; good fields are used', () => {
   const { value, problems } = parseSettings({
     grim: { seconds: 99, enabled: false },

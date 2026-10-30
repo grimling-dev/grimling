@@ -7,7 +7,7 @@
       "name": "grimling",
       "source": "./",
       "description": "Summon, watch and message subagents from a pixel-art card grid; a Grimoire of agent types, swarm launch, Arena and a usage meter.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "Light House Automations LLC",
         "url": "https://github.com/grimling-dev"

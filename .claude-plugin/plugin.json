@@ -1,6 +1,6 @@
 {
   "name": "grimling",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Grimling: summon, watch and message subagents from a pixel-art card grid; a Grimoire of agent types, swarm launch, Arena and a usage meter. Unofficial community mod for Claude Code.",
   "author": {
     "name": "Light House Automations LLC",

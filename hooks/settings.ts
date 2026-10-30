@@ -10,9 +10,9 @@ import type { SettingProblem, Settings } from '../types'
 
 export const DEFAULTS: Settings = {
   time: { zone: 'system', clock: '24h', showUtc: false },
-  grim: { enabled: true, seconds: 8, lines: { done: [], failed: [], killed: [] } },
+  grim: { enabled: true, seconds: 8, waiting: true, lines: { done: [], failed: [], killed: [] } },
   notify: { toast: true, desktop: false, events: ['done', 'failed', 'killed'] },
-  cards: { builtins: true, pack: true, user: true, project: true, packs: [], hide: [] },
+  cards: { builtins: true, pack: true, user: true, project: true, packs: [], hide: [], size: 'auto' },
   templates: { enabled: ['swarm'] },
   // Pods is not part of v0.1.0 and undocumented: `auto` shows the tab only
   // while a status file matches.
@@ -31,6 +31,7 @@ export const DEFAULTS: Settings = {
   agentDex: { rulesBlock: null, afterSave: null },
   feedback: { repo: 'grimling-dev/grimling', nudge: true },
   stop: { enabled: true },
+  keys: { arrows: true },
 }
 
 // The keys a project's `.claude/grimling.json` may set: a cloned repo is not
@@ -114,6 +115,7 @@ const CHECKS: Record<string, Check> = {
   'time.showUtc': bool,
   'grim.enabled': bool,
   'grim.seconds': int(2, 30),
+  'grim.waiting': bool,
   'grim.lines.done': list(grimLine, 20),
   'grim.lines.failed': list(grimLine, 20),
   'grim.lines.killed': list(grimLine, 20),
@@ -126,6 +128,7 @@ const CHECKS: Record<string, Check> = {
   'cards.project': bool,
   'cards.packs': list(pack, 20),
   'cards.hide': list(text(100)),
+  'cards.size': oneOf('auto', 'full', 'compact', 'mini'),
   'templates.enabled': list(text(60)),
   'pods.enabled': oneOf('auto', 'on', 'off'),
   'pods.files': list(text(1000), 20),
@@ -145,6 +148,7 @@ const CHECKS: Record<string, Check> = {
   'feedback.repo': repo,
   'feedback.nudge': bool,
   'stop.enabled': bool,
+  'keys.arrows': bool,
 }
 
 // Every leaf key, dotted, in file order (for /grimling-setup show).

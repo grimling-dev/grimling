@@ -1,0 +1,45 @@
+# Grimling
+
+> Grimling is an open-source mod for Claude Code: a pane of pixel-art agent cards docked beside the chat. Pick a card, type the task, press Enter. Watch the agent work, message it, read its answer and add it to your prompt. Unofficial community mod, not affiliated with Anthropic. MIT licence (code); Grim and the sprite art are CC BY 4.0.
+
+Site: https://grimling.dev
+Source and issues: https://github.com/grimling-dev/grimling
+
+## Install
+
+In a Claude Code session:
+
+    /plugin install grimling --marketplace grimling-dev/grimling
+
+Or from a terminal:
+
+    claude plugin marketplace add grimling-dev/grimling
+    claude plugin install grimling@grimling
+
+Then run /reload-plugins (or start a new session) and type /grimling. Needs Claude Code 2.1.312 or newer (the tested version). Mods are an early-access Claude Code feature. Tested on Windows 11 and Linux; macOS passes the test suite in CI but has not been tried live.
+
+## What it does
+
+- The Grimoire: a filterable grid of agent cards built from Claude Code's built-in agent types, your agent files in ~/.claude/agents and the project's .claude/agents, and any agent packs you add.
+- Launch in one line: pick a card, type the task, press Enter.
+- Live agent cards: message a running agent; read, copy or add a finished agent's answer to your prompt.
+- Flow, Table and Mermaid views of who spawned whom.
+- A usage meter built from your status line (context, plan limits, cost, model).
+- Arena lite: two cards answer the same question with a known answer and are scored.
+- Grim, the mascot, pops up when an agent finishes, fails or is stopped.
+
+## Safety facts
+
+- No network calls: the mod makes no network calls of its own. /grimling-feedback only opens a link in your browser after showing what it holds.
+- Local run log: launches, answers, stops and scored fights are logged on your computer in ~/.claude/grimling/runs/, one file a day, redacted by default (log.runs: redacted, full, meta or off).
+- Stop needs a confirm: stopping an agent needs your confirm in the pane, then Claude Code's own permission check.
+- Agents it launches run in your Claude Code session, under your permission settings, and use your plan.
+
+## Docs
+
+- [README](https://github.com/grimling-dev/grimling/blob/main/README.md): overview, install, files it writes, safety
+- [COMMANDS](https://github.com/grimling-dev/grimling/blob/main/COMMANDS.md): every command and key
+- [SETTINGS](https://github.com/grimling-dev/grimling/blob/main/docs/SETTINGS.md): every key in ~/.claude/grimling/settings.json
+- [PACKS](https://github.com/grimling-dev/grimling/blob/main/docs/PACKS.md): agent packs, cards and sprites
+- [CHANGELOG](https://github.com/grimling-dev/grimling/blob/main/CHANGELOG.md): releases
+- [SECURITY](https://github.com/grimling-dev/grimling/blob/main/SECURITY.md): report a problem privately

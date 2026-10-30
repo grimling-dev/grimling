@@ -1,6 +1,54 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
-<title>Grimling</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grimling: pixel-art agent cards for Claude Code</title>
 <meta name="description" content="Grimling: a pane of pixel-art agents beside your Claude Code chat. Launch, message and read subagents without leaving the terminal.">
+<link rel="canonical" href="https://grimling.dev/">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath fill='%234a3f6b' d='M2 0h4v1h-4zM1 1h6v1h-6zM1 2h1v1h-1zM6 2h1v1h-1zM1 3h1v1h-1zM6 3h1v1h-1zM1 4h2v1h-2zM5 4h2v1h-2zM0 5h7v1h-7zM0 6h1v1h-1zM2 6h5v1h-5zM0 7h1v1h-1zM2 7h5v1h-5zM1 8h1v1h-1zM3 8h4v1h-4zM1 9h6v1h-6zM0 10h1v1h-1zM2 10h1v1h-1zM4 10h1v1h-1zM6 10h1v1h-1z'/%3E%3Cpath fill='%23cfd6de' d='M8 0h3v1h-3zM10 1h2v1h-2zM11 2h1v1h-1z'/%3E%3Cpath fill='%23a8743c' d='M8 1h1v1h-1zM8 2h1v1h-1zM8 3h1v1h-1zM8 4h1v1h-1zM8 6h1v1h-1zM8 7h1v1h-1zM8 8h1v1h-1zM8 9h1v1h-1zM8 10h1v1h-1zM8 11h1v1h-1z'/%3E%3Cpath fill='%23ece6d6' d='M2 2h4v1h-4zM3 3h2v1h-2zM3 4h2v1h-2zM8 5h1v1h-1z'/%3E%3Cpath fill='%23ff8c42' d='M2 3h1v1h-1zM5 3h1v1h-1z'/%3E%3Cpath fill='%237a6aa8' d='M1 6h1v1h-1zM1 7h1v1h-1zM2 8h1v1h-1z'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#15121d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f2f8" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Grimling">
+<meta property="og:url" content="https://grimling.dev/">
+<meta property="og:title" content="Grimling: pixel-art agent cards for Claude Code">
+<meta property="og:description" content="An open-source Claude Code mod: a pane of pixel-art agent cards beside the chat. Launch, message and read subagents without leaving the terminal.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Grimling: pixel-art agent cards for Claude Code">
+<meta name="twitter:description" content="An open-source Claude Code mod: a pane of pixel-art agent cards beside the chat. Launch, message and read subagents without leaving the terminal.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Grimling",
+  "description": "An open-source Claude Code mod: a pane of pixel-art agent cards beside the chat. Pick a card, type the task, press Enter; watch the agent work, message it, read its answer and hand it to your prompt. Unofficial community mod, not affiliated with Anthropic.",
+  "url": "https://grimling.dev/",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Claude Code plugin",
+  "operatingSystem": "Windows, Linux, macOS",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "sameAs": ["https://github.com/grimling-dev/grimling"],
+  "downloadUrl": "https://github.com/grimling-dev/grimling",
+  "installUrl": "https://github.com/grimling-dev/grimling#install",
+  "softwareHelp": "https://github.com/grimling-dev/grimling/blob/main/COMMANDS.md",
+  "author": {
+    "@type": "Organization",
+    "name": "grimling-dev",
+    "url": "https://github.com/grimling-dev"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "grimling-dev",
+    "url": "https://github.com/grimling-dev"
+  }
+}
+</script>
 <link rel="stylesheet" href="vendor/fonts/fonts.css">
 <script>
 /* Seasonal layer switch. Everything Halloween hangs off the `halloween` class on <html>:
@@ -398,7 +446,7 @@ html.halloween-night .hello canvas:focus-visible { outline: 2px solid var(--ambe
     <div class="wrap">
       <div>
         <div class="hello"><canvas id="grim" width="12" height="12" aria-label="Grim, the Grimling mascot, waving"></canvas><span class="say" id="grimsay">Hi, I'm Grim. I reap finished agents' answers for you.</span></div>
-        <div class="status"><i></i>Early access · <span data-sync="version">v0.2.0</span></div>
+        <div class="status"><i></i>Early access · <span data-sync="version">v0.3.0</span></div>
         <h1>Your agents, <span>summoned</span> beside the chat.</h1>
         <p class="lede">Grimling is a Claude Code mod that docks a pane of pixel-art agent cards next to your conversation. Pick one, type the task, press Enter. Watch it work, message it, read its answer.</p>
         <div class="ctas">
@@ -654,6 +702,7 @@ html.halloween-night .hello canvas:focus-visible { outline: 2px solid var(--ambe
       </div>
       <div class="log">
         <!-- sync-site:changelog -->
+        <div class="entry"><div class="when"><b>v0.3.0</b>2026-10-29</div><div><strong>Added</strong><ul><li>Arrow keys move around the pane (setting keys.arrows)</li><li>Cards shrink to fit the whole deck (cards.size, z to cycle)</li><li>Transcript peek: v on a live card (or in a finished agent's answer box) opens its transcript in Claude Code's main view; v again goes back</li><li>Meter updates when Claude Code measures the session (no 2 s polling) and plan limits show "limit in ~40m" at the recent burn rate</li><li>Waiting agents: a wait badge on their card ("wait 32s"), a count in the header and status line, and Grim pops up once per wait (grim.waiting)</li></ul></div></div>
         <div class="entry"><div class="when"><b>v0.2.0</b>2026-10-29</div><div><strong>Added, Fixed</strong><ul><li><em>Added:</em> <strong>Workflows card</strong> linking to the Claude Workflow Library (https://www.claudeworkflows.org/), a community index of Claude workflows run by the r/ClaudeAI moderators.</li><li><em>Fixed:</em> <strong>Live card counts.</strong> The deck shows up to 12 live cards (6 inline); past that, a dim <code>+N older agents</code> line counts the rest, so the footer totals match what you see.</li><li><em>Fixed:</em> <strong>Live card labels.</strong> Labels skip filler words ("the", "give", "Grimling"), so "Give the Grimling landing page" reads <code>landing…</code>, and cards that would still read alike get a number (<code>Build… 1</code>, <code>Build… 2</code>).</li><li><em>Fixed:</em> <strong>Answer box keys.</strong> The box read <code>c: [c] copy</code> and <code>x: [x] close</code>; it now reads <code>c: copy</code> and <code>x: close</code>.</li></ul></div></div>
         <div class="entry"><div class="when"><b>v0.1.0</b>2026-10-29</div><div><strong>First public release.</strong><ul><li><em>Added:</em> <strong>Pane and tabs.</strong> <code>/grimling</code> opens a pane built for a narrow docked column (about 44 columns) with Deck, Flow, Table, Mermaid and Keys tabs.</li><li><em>Added:</em> <strong>The Grimoire.</strong> A filterable grid of pixel-art agent cards: the built-in agent types, every agent file in <code>~/.claude/agents</code> and in the project's <code>.claude/agents</code> (a project file wins over a user file of the same name), and Swarm, which fills a workflow request into your prompt instead of launching anything.</li><li><em>Added:</em> <strong>Launch in one line.</strong> Pick a card, type the task, press Enter.</li><li><em>Added:</em> <strong>Live agent cards.</strong> Running agents get their own cards; send a message to a running agent, read a finished agent's answer, copy it or add it after your prompt draft.</li><li><em>Added:</em> <strong>Stop button.</strong> Stops an agent launched from the deck, only after you confirm it in Claude Code's permission prompt.</li><li><em>Added:</em> <strong>Flow and Table views</strong> of the agents in the session, and a Mermaid tab that copies the agent graph.</li><li><em>Added:</em> <strong>Grim, the mascot.</strong> A small reaper pops up with a speech bubble when an agent finishes, fails or is stopped.</li><li><em>Added:</em> <strong>Meter.</strong> Your status line as bars: context window, plan limits with their reset times, cost, session time and model.</li><li><em>Added:</em> <strong>Arena lite.</strong> Pit two cards against each other on a question with a known answer; both run on a small model and are scored by correctness, then speed, then tokens.</li><li><em>Added:</em> <strong>Run log and the agent-dex skill.</strong> Launches, answers and scored fights are logged on your computer in <code>~/.claude/grimling/runs/</code>, one file a day, redacted by default (modes: redacted, full, meta, off).</li><li><em>Added:</em> <strong>Settings file.</strong> Optional <code>~/.claude/grimling/settings.json</code> with a default for every key and a JSON schema for editor autocomplete.</li><li><em>Added:</em> <strong>Feedback.</strong> <code>/grimling-feedback</code> previews exactly what would be sent (no paths, prompts or answers) and opens a pre-filled GitHub issue or discussion in your browser.</li><li><em>Known limitations:</em> <strong>macOS is not yet tried live.</strong> The test suite passes on Windows, Linux and macOS in CI; nobody has run Grimling on a Mac yet.</li></ul></div></div>
         <!-- /sync-site:changelog -->
@@ -670,9 +719,9 @@ html.halloween-night .hello canvas:focus-visible { outline: 2px solid var(--ambe
         <p>Order can change. Each step ships when it is tested. Some things are still in the crypt.</p>
       </div>
       <div class="lanes">
-        <div class="lane" style="--c: var(--teal)"><h3>Now <small>v0.2.0 early access</small></h3><ul><li>Clearer live cards: tidier labels and a count of older agents</li><li>Tests pass on Windows, Linux and macOS in CI</li><li>A setup guide for GPU swarms: <code>docs/GPU-SWARMS.md</code></li><li>Your feedback through <code>/grimling-feedback</code></li></ul></div>
-        <div class="lane lane-next" style="--c: var(--amber)"><h3><span>Next<svg class="rm-hw rm-lantern" viewBox="0 0 12 16" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><rect x="4" y="0" width="4" height="1" class="frame"/><rect x="2" y="2" width="8" height="1" class="frame"/><rect x="2" y="13" width="8" height="2" class="frame"/><rect x="2" y="3" width="1" height="10" class="frame"/><rect x="9" y="3" width="1" height="10" class="frame"/><rect x="3" y="3" width="6" height="10" class="glass"/><g class="flame"><rect x="5" y="6" width="2" height="5" class="outer"/><rect x="5" y="8" width="2" height="2" class="core"/></g></svg></span> <small>soon</small></h3><ul><li>A Workflows card that opens the community Claude Workflow Library</li><li>A short demo video</li><li>More agent packs</li><li>Grimling tried live on macOS</li><li>Arena tuning: harder puzzles, a finer tie-break</li></ul></div>
-        <div class="lane" style="--c: var(--plum)"><h3>Later <small>sealed</small></h3><p class="hint">Hover, tap or tab to unseal.</p><ul class="sealed"><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1.2 11 10.4H1Z"/><circle cx="6" cy="7.2" r="1.3"/></svg></span><span class="seal-text">A prompt library with <code>@</code> shortcuts</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M8.2 1.4a4.6 4.6 0 1 0 0 9.2 3.6 3.6 0 1 1 0-9.2Z"/></svg></span><span class="seal-text">Save Mermaid diagrams to reopen later</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3 1v10M3 3.2l5 2.8-5 2.8M9.2 1v10"/></svg></span><span class="seal-text">A &ldquo;needs you&rdquo; queue for agents waiting on you, and richer notification rules</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10M2.6 2.6l6.8 6.8M9.4 2.6l-6.8 6.8"/></svg></span><span class="seal-text">Per-agent cost bars</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2 1.2h8L2 10.8h8Z"/></svg></span><span class="seal-text">One pane for every terminal</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3.2 1.4h6v9.2h-6ZM3.2 1.4a1.4 1.4 0 0 0 0 2.8M5 5h2.6M5 7.4h2.6"/></svg></span><span class="seal-text">Save a community workflow as your own recipe card, credited and linked to its author</span></li></ul></div>
+        <div class="lane" style="--c: var(--teal)"><h3>Now <small>v0.3.0 early access</small></h3><ul><li>Arrow keys around the pane; cards shrink so the whole deck fits</li><li>Transcript peek, a live meter with a limit forecast, and waiting badges</li><li>The Workflows card for the community Claude Workflow Library</li><li>Tests pass on Windows, Linux and macOS in CI</li><li>A setup guide for GPU swarms: <code>docs/GPU-SWARMS.md</code></li><li>Your feedback through <code>/grimling-feedback</code></li></ul></div>
+        <div class="lane lane-next" style="--c: var(--amber)"><h3><span>Next<svg class="rm-hw rm-lantern" viewBox="0 0 12 16" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><rect x="4" y="0" width="4" height="1" class="frame"/><rect x="2" y="2" width="8" height="1" class="frame"/><rect x="2" y="13" width="8" height="2" class="frame"/><rect x="2" y="3" width="1" height="10" class="frame"/><rect x="9" y="3" width="1" height="10" class="frame"/><rect x="3" y="3" width="6" height="10" class="glass"/><g class="flame"><rect x="5" y="6" width="2" height="5" class="outer"/><rect x="5" y="8" width="2" height="2" class="core"/></g></svg></span> <small>soon</small></h3><ul><li>A short demo video</li><li>More agent packs</li><li>Grimling tried live on macOS</li><li>Arena tuning: harder puzzles, a finer tie-break</li></ul></div>
+        <div class="lane" style="--c: var(--plum)"><h3>Later <small>sealed</small></h3><p class="hint">Hover, tap or tab to unseal.</p><ul class="sealed"><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1.2 11 10.4H1Z"/><circle cx="6" cy="7.2" r="1.3"/></svg></span><span class="seal-text">A prompt library with <code>@</code> shortcuts</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M8.2 1.4a4.6 4.6 0 1 0 0 9.2 3.6 3.6 0 1 1 0-9.2Z"/></svg></span><span class="seal-text">Save Mermaid diagrams to reopen later</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3 1v10M3 3.2l5 2.8-5 2.8M9.2 1v10"/></svg></span><span class="seal-text">A full &ldquo;needs you&rdquo; queue with permission asks, and richer notification rules</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10M2.6 2.6l6.8 6.8M9.4 2.6l-6.8 6.8"/></svg></span><span class="seal-text">Per-agent cost bars</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2 1.2h8L2 10.8h8Z"/></svg></span><span class="seal-text">One pane for every terminal</span></li><li tabindex="0"><span class="sigil" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M3.2 1.4h6v9.2h-6ZM3.2 1.4a1.4 1.4 0 0 0 0 2.8M5 5h2.6M5 7.4h2.6"/></svg></span><span class="seal-text">Save a community workflow as your own recipe card, credited and linked to its author</span></li></ul></div>
       </div>
     </div>
   </section>
@@ -693,7 +742,7 @@ html.halloween-night .hello canvas:focus-visible { outline: 2px solid var(--ambe
   <div class="wrap">
     <span>Grimling · unofficial community mod for Claude Code · not affiliated with Anthropic · code MIT, art CC BY 4.0 · <a href="https://github.com/grimling-dev/grimling">GitHub</a></span>
     <span class="contact">Light House Automations LLC · <a href="mailto:alexz@lightauto.tech">alexz@lightauto.tech</a> · <a href="https://lightauto.tech">lightauto.tech</a></span>
-    <span>Page updated 2026-10-29 · <span data-sync="version">v0.2.0</span></span>
+    <span>Page updated 2026-10-29 · <span data-sync="version">v0.3.0</span></span>
   </div>
 </footer>
 

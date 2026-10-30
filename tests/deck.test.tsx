@@ -11,7 +11,8 @@ const PANE = {
     isFocused: true,
     bodyColumns: 78,
     placement: 'dock',
-    scroll: { offset: 0, bodyRows: 40 },
+    // 41: keys.arrows pads the docked deck, and the engine's "more" row takes one.
+    scroll: { offset: 0, bodyRows: 41 },
     view: {},
   },
 } as const
@@ -509,6 +510,14 @@ test('answers and agent names reach the pane with no escape sequences (S3)', asy
   expect(await ui.find({ type: 'Text', text: /found it$/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /scan repo/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e]/ })).toBeUndefined()
+  // "put in prompt" is a button, not a text box: with the ring on it nothing
+  // types, so the answer box's c and x (and z) are live hotkeys there.
+  await $.ui.focus(ringTo('ans-prompt'))
+  await ui.redraw()
+  expect(await ui.find({ type: 'Button', key: 'ans-prompt' })).toBeTruthy()
+  expect(await ui.find({ type: 'Input', key: 'ans-prompt' })).toBeUndefined()
+  expect((await ui.find({ type: 'Button', key: 'ans-copy' }))?.props.hotkey).toBe('c')
+  expect((await ui.find({ type: 'Button', key: 'size-cycle' }))?.props.hotkey).toBe('z')
   await ui.press({ key: 'ans-prompt' })
   expect(fills[0]).toContain('found it\n\tin auth.ts')
   expect(fills[0]).not.toContain(ESC)

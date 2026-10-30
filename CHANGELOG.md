@@ -4,7 +4,15 @@ All notable changes to Grimling are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-29
+
+### Added
+
+- Arrow keys move around the pane (setting keys.arrows)
+- Cards shrink to fit the whole deck (cards.size, z to cycle)
+- Transcript peek: v on a live card (or in a finished agent's answer box) opens its transcript in Claude Code's main view; v again goes back
+- Meter updates when Claude Code measures the session (no 2 s polling) and plan limits show "limit in ~40m" at the recent burn rate
+- Waiting agents: a wait badge on their card ("wait 32s"), a count in the header and status line, and Grim pops up once per wait (grim.waiting)
 
 ## [0.2.0] - 2026-10-29
 

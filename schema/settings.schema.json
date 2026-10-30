@@ -27,6 +27,7 @@
           "properties": {
             "enabled": { "type": "boolean", "default": true },
             "seconds": { "type": "integer", "minimum": 2, "maximum": 30, "default": 8, "description": "How long Grim stays up." },
+            "waiting": { "type": "boolean", "default": true, "description": "Grim pops up when an agent starts waiting." },
             "lines": {
               "type": "object",
               "additionalProperties": false,
@@ -72,7 +73,8 @@
             "properties": { "path": { "type": "string", "minLength": 1 }, "ns": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } }
           }
         },
-        "hide": { "type": "array", "items": { "type": "string", "maxLength": 100 }, "default": [], "description": "Card ids (scout, swarm, agent-<name>) or agent types to leave out." }
+        "hide": { "type": "array", "items": { "type": "string", "maxLength": 100 }, "default": [], "description": "Card ids (scout, swarm, agent-<name>) or agent types to leave out." },
+        "size": { "type": "string", "enum": ["auto", "full", "compact", "mini"], "default": "auto", "description": "Grimoire card size in the docked deck. auto: the largest size at which every shown card fits (full, then compact, then mini; past mini, a \"N more\" line). z cycles it for the session. Live agent cards are always full." }
       }
     },
     "templates": {
@@ -152,6 +154,13 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean", "default": true, "description": "x / STOP on running cards the deck launched (asks Stop / Keep first, then TaskStop through the permission check). false hides the button." }
+      }
+    },
+    "keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "arrows": { "type": "boolean", "default": true, "description": "Arrow keys move the focus ring around the docked pane: Up and Down between rows (keeping the column), Left and Right within a row (needs the keybinding in docs/SETTINGS.md). Tab is unchanged. false: arrows behave as before." }
       }
     }
   },

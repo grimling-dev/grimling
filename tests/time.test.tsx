@@ -58,6 +58,13 @@ test('a plan window the host drops after its reset shows 0% (B5)', () => {
   expect(carryLimits([{ kind: 'five_hour', pct: 0, reset: true }], [next], at + 1)).toEqual([next])
 })
 
+test('a carried limit keeps its burn forecast; a passed reset drops it', () => {
+  const at = Date.UTC(2026, 9, 29, 21, 0)
+  const before = [{ kind: 'five_hour', pct: 60, resetsAt: '2026-10-29T21:00:00Z', eta: at - 30_000, etaFrom: at - 120_000 }]
+  expect(carryLimits(before, [], at - 60_000)).toEqual(before)
+  expect(carryLimits(before, [], at)).toEqual([{ kind: 'five_hour', pct: 0, reset: true }])
+})
+
 test('puzzles file: good entries kept, bad ones skipped with a problem, same id replaces in place', () => {
   const { puzzles, problems } = parsePuzzles([
     { id: 'bat-ball', title: 'Capital', question: 'Capital of France?', answer: 'Paris', accept: ['paris france'] },

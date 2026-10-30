@@ -1,5 +1,14 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderChildren, Timer } from 'claude-code'
+import type {
+  EngineInterface,
+  Register,
+  RenderChildren,
+  SessionContextUsage,
+  SessionCost,
+  SessionRateLimit,
+  Timer,
+  UiViewResult,
+} from 'claude-code'
 
 import type {
   AgentUsage,
@@ -8,6 +17,7 @@ import type {
   ArenaRecord,
   ArenaSide,
   Armed,
+  CardSizeMode,
   DexEntry,
   FeedbackDraft,
   GrimEvent,
@@ -24,12 +34,14 @@ import type {
   Tab,
   TrackedAgent,
 } from '../types'
-import { PALETTE, SWARM_TEMPLATE, TEMPLATE_ID, cardForType, fillTemplate, isHidden, parseTemplate, readMeta, splitDoc, titleCase } from './dex'
+import { PALETTE, SWARM_TEMPLATE, halfHeight, mainColour, TEMPLATE_ID, cardForType, fillTemplate, isHidden, parseTemplate, readMeta, splitDoc, titleCase } from './dex'
 import type { Meta, TemplateCard } from './dex'
 import { CHALLENGES, arenaPrompt, decide, extractAnswer, isCorrect, parsePuzzles, rate, shareCard, why, withPuzzles } from './arena'
 import { KINDS, buildFeedback, diagnosticsText, failurePrefill, kindFromArgs, openerFor } from './feedback'
 import type { Outgoing } from './feedback'
-import { fitDeck, windowAt } from './fit'
+import { CARD_SIZES, fitSized, nextMode, windowAt } from './fit'
+import type { CardSize, SizeMode } from './fit'
+import { arrowOf, navMove, navRows } from './nav'
 import { backoff, deniedMessage, identityProblem, isOwnerDenied } from './identity'
 import { isCutBrief, launchClash } from './launch'
 import { printable, printableFields } from './printable'
@@ -38,6 +50,9 @@ import { DEFAULTS, expandHome, mergeProject, parseSettings, problemLine } from '
 import { USER_FILE, checkText, currentAnswers, emptyHint, fixFirst, modeOf, planWrite, questions, readUserFile, showText } from './setup'
 import type { UserFile } from './setup'
 import { carryLimits, killBy, resetTime, zoneOf } from './time'
+import type { Limit } from './time'
+import { addSample, burnRate, etaAt, fmtEta } from './burn'
+import type { BurnSample } from './burn'
 
 // Grimling: a tab bar, a launch box and the Grimoire, a filterable grid of
 // agent cards (built-ins plus every agent file on disk). Launch spawns a
@@ -70,8 +85,13 @@ const GONE_AFTER = 5
 const STALE_DEFAULT_S = 180
 // While one of these has the ring, keys are typing: no button hotkeys.
 const TYPING = new Set([INPUT, LAUNCH, FILTER, FEEDBACK_INPUT])
+// Rows the docked tree is padded past the window while keys.arrows is on:
+// a tree taller than the window makes Up and Down scrolls the deck can take.
+const ARROW_PAD = 2
 
 const tab = atom({ plugin: 'grimling', key: 'tab' } as const, 'deck' as Tab)
+// The Grimoire's card size for this session, from z (null: cards.size).
+const cardSize = atom({ plugin: 'grimling', key: 'cardSize' } as const, null as CardSizeMode | null)
 const agents = atom({ plugin: 'grimling', key: 'agents' } as const, [] as TrackedAgent[], {
   shape: 'agents-1',
 })
@@ -126,7 +146,7 @@ const meter = atom({ plugin: 'grimling', key: 'meter' } as const, null as Meter 
 const grim = atom({ plugin: 'grimling', key: 'grim' } as const, null as GrimSay | null, { shape: 'grim-1' })
 const grimFrame = atom({ plugin: 'grimling', key: 'grimFrame' } as const, 'wave' as GrimFrame)
 const settings = atom({ plugin: 'grimling', key: 'settings' } as const, DEFAULTS as Settings, {
-  shape: 'settings-3',
+  shape: 'settings-5',
 })
 const settingsProblems = atom(
   { plugin: 'grimling', key: 'settingsProblems' } as const,
@@ -211,7 +231,17 @@ const GRIM_LINES: Record<GrimSay['event'], string[]> = {
   ],
   killed: ['{name} was stopped. Rest in peace.', '{name} was laid to rest after {duration}.', '{name} got called off: "{task}".'],
   thanks: ['Thank you. I will haunt the maintainers with it.', 'Received. Your words go to the other side (GitHub): press Submit there.'],
+  // 'waiting' (AgentStatus): a plan to approve, work of its own, or an Agent
+  // call; not confirmed to cover permission asks, so it never says "needs you".
+  waiting: [
+    '{name} is waiting. Enter on its card to message it.',
+    '{name} paused after {duration}: it may need you.',
+    '{name} is held: a plan to approve, or work of its own.',
+  ],
 }
+// One Grim popup per agent a minute at most, so a running/waiting flap is quiet.
+const WAIT_POP_MS = 60_000
+const lastWaitPop = new Map<string, number>()
 // Up for grim.seconds (8 s by default, or until the next event), a frame
 // every 400 ms while it is up.
 const GRIM_TICK_MS = 400
@@ -292,8 +322,10 @@ const KEY_GROUPS: { title: string; rows: [string, string][] }[] = [
   {
     title: 'move and press',
     rows: [
-      ['Tab ↓ →', 'next item'],
-      ['Shift+Tab ↑ ←', 'previous item'],
+      ['Tab', 'next item (Shift+Tab: previous)'],
+      ['↑ ↓', 'row above / below, same column'],
+      ['← →', 'left / right in a row (keybinding: SETTINGS)'],
+      ['in a text box', '← → move the cursor; ↑ ↓ leave it'],
       ['Enter', 'press the item under the ring'],
       ['d f t k', 'Deck, Flow, Table, Keys'],
       ['a  m  h', 'Arena, copy mermaid, tour'],
@@ -303,6 +335,7 @@ const KEY_GROUPS: { title: string; rows: [string, string][] }[] = [
     title: 'deck',
     rows: [
       ['1-9', 'pick a card, jump to the launch box'],
+      ['z', 'card size: auto, full, compact, mini'],
       ['type + Enter', 'launch the picked agent'],
       ['find', 'filter cards by name'],
       ['chips', 'filter by category'],
@@ -314,8 +347,10 @@ const KEY_GROUPS: { title: string; rows: [string, string][] }[] = [
     rows: [
       ['Enter on running', 'type a message to it'],
       ['Enter on finished', 'read its answer'],
-      ['Enter / c / x', 'answer: to prompt, copy, close'],
+      ['Enter / c / v / x', 'answer: to prompt, copy, transcript, close'],
       ['x on running', 'stop it: Stop / Keep first (deck-launched)'],
+      ['v', 'transcript in the main view (again: back)'],
+      ['wait 32s', 'waiting: a plan to approve, or its own work'],
     ],
   },
   {
@@ -378,6 +413,58 @@ const briefs = new Map<string, string>()
 const spawnLogged = new Set<string>()
 // The task the launch box last warned about: Enter on it again launches anyway.
 let clashWarned = ''
+// Whether the engine raised session.measure this session: the meter then
+// takes its readings pushed and the poll stops reading session.usage.
+let measured = false
+// Each plan limit's recent readings, for its burn forecast (lost on a reload:
+// the forecast comes back once the new samples span 3 minutes).
+const burnSamples = new Map<string, BurnSample[]>()
+
+type UsageReading = {
+  context?: SessionContextUsage
+  rateLimits?: SessionRateLimit[]
+  cost?: SessionCost
+  startedAt?: number
+}
+
+// One usage reading (pushed by session.measure or polled): the cost, and the
+// meter with each plan limit's forecast. Writes only on a change.
+async function applyUsage($: EngineInterface, u: UsageReading, now: number): Promise<void> {
+  const cost = u.cost?.usd ?? 0
+  if (cost !== (await read($, costUsd))) await update($, costUsd, () => cost)
+  const lastReading = await read($, meter)
+  // A window the host stopped reporting after its reset shows 0% (B5).
+  const limits = carryLimits(
+    lastReading?.limits ?? [],
+    (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed, resetsAt: r.resetsAt })),
+    now,
+  ).map(l => {
+    const bare: Limit = { kind: l.kind, pct: l.pct }
+    if (l.resetsAt !== undefined) bare.resetsAt = l.resetsAt
+    if (l.reset) bare.reset = true
+    if (l.reset) {
+      burnSamples.delete(l.kind)
+      return bare
+    }
+    const samples = addSample(burnSamples.get(l.kind) ?? [], { at: now, pct: l.pct })
+    burnSamples.set(l.kind, samples)
+    // From the reading the pct last moved at, so an unchanged reading does
+    // not push the forecast later.
+    const from = samples.at(-1)?.at ?? now
+    const eta = etaAt(l.pct, burnRate(samples), from, l.resetsAt)
+    return eta === null ? bare : { ...bare, eta, etaFrom: from }
+  })
+  const reading: Meter = {
+    // A host may leave parts out (a test, an SDK): missing reads as empty.
+    ctxPct: u.context?.percent,
+    ctxTokens: u.context?.tokens,
+    window: u.context?.window ?? 0,
+    limits,
+    startedAt: u.startedAt ?? lastReading?.startedAt ?? now,
+    sessions: lastReading?.sessions ?? 0,
+  }
+  if (JSON.stringify(reading) !== JSON.stringify(lastReading)) await update($, meter, () => reading)
+}
 
 // Once per load: the mod runs under another name than its own, or a state
 // write was refused for that reason. A toast, a transcript line and a debug
@@ -851,6 +938,27 @@ async function podFiles($: EngineInterface, patterns: string[], h: string): Prom
 
 // The pane's width when last drawn, for the feedback diagnostics.
 let paneWidth: number | null = null
+// Arrow keys (keys.arrows, hooks/nav.ts): the rows of focusable keys the
+// pane drew last, and the column Up and Down aim for. `navLayout` is the
+// same rows with the skipped keys (STOP, the size label) still in, so an
+// arrow from one of those starts where it is drawn.
+let navGrid: string[][] = []
+let navLayout: string[][] = []
+let navColumn: number | null = null
+// While the ring is on one of these, arrows stay among them (the dialogs).
+const NAV_GROUPS = [
+  ['confirm-keep', 'confirm-stop'],
+  ['ans-prompt', 'ans-copy', 'ans-view', 'ans-close'],
+]
+// STOP buttons are left to x (and Tab), so an arrow never lands on one; the
+// card size button in the Grimoire's border is z's (and Tab's) the same way.
+const SIZE_BUTTON = 'size-cycle'
+// The transcript peek row under a live card is v's (and Tab's) the same way.
+const PEEK_BUTTON = 'agent-view'
+const navSkip = (key: string) => key.startsWith('stop-') || key === SIZE_BUTTON || key === PEEK_BUTTON
+// The live card the peek row was last drawn for, so the row stays while the
+// ring is on the row itself. A module variable: render must not write state.
+let peekFor: string | null = null
 
 async function osFamily($: EngineInterface): Promise<string> {
   if ((await $.env.get('OS').catch(() => undefined)) === 'Windows_NT') return 'windows'
@@ -1114,7 +1222,8 @@ async function announce($: EngineInterface, event: GrimEvent, text: string) {
 async function grimPop($: EngineInterface, event: GrimSay['event'], vars: Record<string, string>, report?: string) {
   const set = await read($, settings)
   if (!set.grim.enabled) return
-  const own = event === 'thanks' ? [] : set.grim.lines[event]
+  // grim.lines has no thanks or waiting list: those use the built-in lines.
+  const own = event === 'thanks' || event === 'waiting' ? [] : set.grim.lines[event]
   const pool = own.length ? own : GRIM_LINES[event]
   const line = pool[grimTurn++ % pool.length] ?? ''
   const text = line.replace(/\{(\w+)\}/g, (m: string, k: string) => vars[k] ?? m)
@@ -1292,14 +1401,17 @@ const tour = atom({ plugin: 'grimling', key: 'tour' } as const, null as number |
 type Step = { keys: string; what: string; view?: Tab }
 const STEPS: Step[] = [
   { keys: '/grimling', what: 'open Grimling and give it the keyboard', view: 'deck' },
-  { keys: 'Tab / arrows', what: 'move: tabs, launch box, filters, cards, live agents', view: 'deck' },
+  { keys: 'Tab / arrows', what: 'Tab: next in order; arrows: the item above, below or beside', view: 'deck' },
   { keys: 'Enter on a tab', what: 'switch view: Deck, Flow, Table, Keys; mermaid copies', view: 'deck' },
   { keys: 'move onto a card', what: 'its dex entry shows (the launch target stays)', view: 'deck' },
   { keys: 'Enter on a card', what: 'make it the launch target; type the task, Enter starts it', view: 'deck' },
   { keys: '1-9', what: 'target one of the first nine shown cards and jump to the launch box', view: 'deck' },
+  { keys: 'z', what: 'card size: auto fits the whole deck; full, compact, mini (this session)', view: 'deck' },
   { keys: 'chips / filter', what: 'All Code Research Web Ops Swarm Custom; type to filter by name', view: 'deck' },
   { keys: 'Enter on a live agent', what: 'running: type a message; finished: read its answer', view: 'deck' },
   { keys: 'x on a running card', what: 'stop an agent the deck launched (Stop / Keep first)', view: 'deck' },
+  { keys: 'v on a live card', what: "open the agent's transcript in the main view; v again goes back", view: 'deck' },
+  { keys: 'wait 32s / ◎ N waiting', what: 'an agent waiting (a plan to approve, or its own work): counted in the tab bar, Grim pops once', view: 'deck' },
   { keys: 'Swarm', what: 'fill the prompt with a swarm request; send it with Enter', view: 'deck' },
   { keys: 'Workflows', what: 'open the community Claude Workflow Library in your browser (a link only)', view: 'deck' },
   { keys: 'agent-dex skill', what: 'say "collect agent types": saves specialized runs as agents', view: 'deck' },
@@ -1437,6 +1549,13 @@ function since(from: number, to: number): string {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
 }
 
+// A waiting card's badge, within the card's 8 columns: "wait 32s", "wait 12m", "wait 3h".
+function waitBadge(from: number, to: number): string {
+  const s = Math.max(0, Math.round((to - from) / 1000))
+  const t = s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
+  return `wait ${t}`
+}
+
 function kTokens(n: number): string {
   if (n < 1000) return String(n)
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
@@ -1499,6 +1618,8 @@ function mermaidSource(list: TrackedAgent[]): string {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    // A /clear or resume: poll the usage until the engine measures again.
+    measured = false
     if (identityProblem($.plugin.name)) warnIdentity($)
     await $.command.register({
       name: 'grimling',
@@ -1538,6 +1659,8 @@ export const register: Register = on => {
           parentId: a.parentId,
           firstSeen: old?.firstSeen ?? now,
           endedAt: ENDED.has(a.status) ? (old?.endedAt ?? now) : undefined,
+          // When this wait began: kept across polls while it stays waiting.
+          waitSince: a.status === 'waiting' ? (old?.status === 'waiting' ? (old.waitSince ?? now) : now) : undefined,
         })
       }
       // Not listed and not ended: count the misses, then call it gone.
@@ -1557,6 +1680,16 @@ export const register: Register = on => {
       }
       kept = kept.slice(-AGENT_CAP)
       if (JSON.stringify(kept) !== JSON.stringify(before)) await update($, agents, () => kept)
+      // The peek row goes when its agent ends: a ring on it moves to that
+      // agent's card (or the first card left) so the ring is not lost.
+      if (peekFor && (await read($, focusKey)) === PEEK_BUTTON) {
+        const target = kept.find(a => a.id === peekFor)
+        const to = target ?? kept[0]
+        if (to && (!target || ENDED.has(target.status))) {
+          debug($, 'peek.ring', { to: `agent-${to.id}` })
+          await focusOn($, `agent-${to.id}`)
+        }
+      }
 
       const was = new Map(before.map(a => [a.id, a.status]))
       const dex = await read($, roster)
@@ -1571,6 +1704,22 @@ export const register: Register = on => {
           duration: since(first, now),
           task: shortTitle(a.description),
         }
+      }
+      // Grim once per wait (no toast, no desktop note): not for an agent the
+      // deck stopped, not within a minute of its last wait popup, and never
+      // over a failed agent's bubble that still offers f (report).
+      // A popup over a minute old no longer holds anything back: drop it, so
+      // the map keeps only agents that popped in the last minute.
+      for (const [id, at] of lastWaitPop) if (now - at >= WAIT_POP_MS) lastWaitPop.delete(id)
+      const waitPop = async (a: { id: string; type: string; description: string }) => {
+        const set = await read($, settings)
+        if (!set.grim.enabled || set.grim.waiting === false || halted[a.id]) return
+        const last = lastWaitPop.get(a.id)
+        if (last !== undefined && now - last < WAIT_POP_MS) return
+        const cur = await read($, grim)
+        if (cur?.event === 'failed' && cur.report && now < cur.until) return
+        lastWaitPop.set(a.id, now)
+        await grimPop($, 'waiting', grimVars(a))
       }
       for (const a of list) {
         const prior = was.get(a.id) ?? ''
@@ -1588,34 +1737,30 @@ export const register: Register = on => {
         } else if (a.status === 'completed' && prior && prior !== 'completed') {
           await announce($, 'done', `Agent done: ${a.description} (Enter on its card for the answer)`)
           await grimPop($, 'done', grimVars(a))
+        } else if (a.status === 'waiting' && prior !== 'waiting') {
+          await waitPop(a)
         }
       }
 
       const running = kept.filter(a => !ENDED.has(a.status)).length
+      const waiting = kept.filter(a => a.status === 'waiting').length
       const failed = kept.filter(a => BAD.has(a.status)).length
-      const u = await $.session.usage()
-      const cost = u.cost?.usd ?? 0
-      if (cost !== (await read($, costUsd))) await update($, costUsd, () => cost)
-      const lastReading = await read($, meter)
-      const reading: Meter = {
-        // A host may leave parts out (a test, an SDK): missing reads as empty.
-        ctxPct: u.context?.percent,
-        ctxTokens: u.context?.tokens,
-        window: u.context?.window ?? 0,
-        // A window the host stopped reporting after its reset shows 0% (B5).
-        limits: carryLimits(
-          lastReading?.limits ?? [],
-          (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed, resetsAt: r.resetsAt })),
-          now,
-        ),
-        startedAt: u.startedAt ?? now,
-        sessions: lastReading?.sessions ?? 0,
+      if (!measured) {
+        // A host that never raises session.measure (an SDK, a test): read it.
+        await applyUsage($, await $.session.usage(), now)
+      } else {
+        // Pushed readings: no call here, only windows whose reset has passed go to 0%.
+        const m = await read($, meter)
+        if (m && JSON.stringify(carryLimits(m.limits, [], now)) !== JSON.stringify(m.limits)) {
+          // From the value update hands in, so a reading pushed since the read stays.
+          await update($, meter, cur => (cur ? { ...cur, limits: carryLimits(cur.limits, [], now) } : cur))
+        }
       }
-      if (JSON.stringify(reading) !== JSON.stringify(lastReading)) await update($, meter, () => reading)
       const p = await read($, pod)
       // Only when something is going on; the owner's own status line has the cost.
       const parts: string[] = []
       if (running) parts.push(`⚙ ${running} running`)
+      if (waiting) parts.push(`◎ ${waiting} waiting`)
       if (failed) parts.push(`${failed} failed`)
       if (p && p.phase !== 'DONE') {
         const { age, stale } = podAge(p, now)
@@ -1769,9 +1914,36 @@ export const register: Register = on => {
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const el = e.element ?? null
     debug($, 'focus', el)
+    // Tab or a click starts a new column for Up and Down.
+    if (e.origin?.kind === 'person') navColumn = null
     if (el !== (await read($, focusKey))) await update($, focusKey, () => el)
 
     return next(e)
+  })
+
+  // Arrow keys reach the pane as scrolls (hooks/nav.ts says which): each moves
+  // the ring to the element above, below or beside it instead. At an edge the
+  // ring stays; a tree taller than its padding still scrolls there.
+  on('ui.scroll', { requestId: PANE }, async ($, e, next) => {
+    const dir = arrowOf(e)
+    if (!dir || !(await read($, settings)).keys.arrows) return next(e)
+    const from = await read($, focusKey)
+    // A text box keeps Left and Right for its cursor (the engine sends them
+    // there; this is the guard should one ever arrive as a scroll). Home and
+    // End arrive as this same scroll and are dropped too: a scroll hook can
+    // only keep the window or move it, not hand a key on to the Input.
+    if (TYPING.has(from ?? '') && (dir === 'left' || dir === 'right')) return {}
+    const move = navMove(navGrid, from, dir, navColumn, NAV_GROUPS, navLayout)
+    navColumn = move.sticky
+    debug($, 'arrow', { dir, to: move.to })
+    // The move raises ui.focus (origin this plugin), which records the key.
+    if (move.to) {
+      await focusOn($, move.to)
+      return {}
+    }
+    // Taller than the window plus the deck's padding: let the edge scroll.
+    if ((dir === 'up' || dir === 'down') && e.contentRows > e.bodyRows + ARROW_PAD) return next(e)
+    return {}
   })
 
   on('ui.close', { id: TOUR_PANE }, async ($, e, next) => {
@@ -1804,6 +1976,19 @@ export const register: Register = on => {
         <Text dimColor>Full list: COMMANDS.md in the mod folder</Text>
       </Box>
     )
+  })
+
+  // The engine's usage readings, pushed after each turn and when a plan
+  // limit moves a point: the meter follows them and the poll stops asking.
+  on('session.measure', async ($, e, next) => {
+    const r = await next(e)
+    try {
+      measured = true
+      await applyUsage($, { context: e.context, rateLimits: e.rateLimits, cost: e.cost }, await $.clock.now())
+    } catch (err) {
+      onFail($, 'measure.error')(err)
+    }
+    return r
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -1877,6 +2062,7 @@ export const register: Register = on => {
     const grimUp = await read($, grim)
     const grimAt = await read($, grimFrame)
     const switches = await read($, settings)
+    const sizeSet = await read($, cardSize)
     const setReport = await read($, settingsProblems)
     const fb = await read($, feedback)
     const sd = await read($, setup)
@@ -1895,8 +2081,11 @@ export const register: Register = on => {
     const width = Math.max(30, e.props.bodyColumns)
     // Inline the pane shares the screen with the prompt: keep it short.
     const room = inline ? 5 : Math.max(4, (e.viewport?.rows ?? 24) - 9)
+    const bodyRows = e.props.scroll?.bodyRows
+    const padTo = switches.keys.arrows && !inline && bodyRows ? bodyRows + ARROW_PAD : 0
 
     const running = list.filter(a => !ENDED.has(a.status)).length
+    const waiting = list.filter(a => a.status === 'waiting').length
     const done = list.filter(a => a.status === 'completed').length
     const failed = list.filter(a => BAD.has(a.status)).length
     const tokens = (id: string) => {
@@ -1932,21 +2121,32 @@ export const register: Register = on => {
           // While a failed agent's Grim bubble offers `f` (report), Flow keeps only Tab and Enter.
           tabButton(`tab-${t}`, t.toUpperCase(), t === 'flow' && reportUp ? undefined : t[0], () => void update($, tab, () => t), view === t),
         )}
+        {waiting > 0 && (
+          <Text key="waiting-count" color="suggestion" bold>
+            {`◎ ${waiting} waiting`}
+          </Text>
+        )}
       </Box>
     )
     // The owner's status line, as bars: context, plan limits, cost and time,
     // model, sessions, and the pod's runs as a heat strip.
     const LIMIT_LABEL: Record<string, string> = { five_hour: '5h', seven_day: '7d', seven_day_opus: '7d op' }
-    const row = (label: string, pct: number, extra: string, key: string) => {
+    // alert (a plan limit's forecast) goes before the dim extra, so the
+    // row's end truncation cuts the reset time first.
+    const row = (label: string, pct: number, extra: string, key: string, alert?: { text: string; urgent: boolean }) => {
       const g = gauge(pct)
       return (
         <Text key={key} wrap="truncate-end">
           <Text dimColor>{label.padEnd(4)}</Text>
           <Text color={g.color}>{g.bar}</Text> <Text bold>{`${Math.round(pct)}%`.padStart(4)}</Text>
+          {alert && <Text color={alert.urgent ? 'error' : 'warning'}> {alert.text}</Text>}
           <Text dimColor> {extra}</Text>
         </Text>
       )
     }
+    // A limit's burn forecast, while it is ahead and the percentage moved under 15 minutes ago.
+    const forecast = (l: Meter['limits'][number]): number | null =>
+      l.eta && l.eta > now && now - (l.etaFrom ?? 0) < 15 * 60_000 && !l.reset ? l.eta - now : null
     const model = used.main?.model?.replace(/^claude-/, '') ?? ''
     const heat = (p: PodStatus) =>
       p.runs
@@ -1954,10 +2154,12 @@ export const register: Register = on => {
         .join('')
     // A rounded box with its title set into the top border: the title Box is
     // drawn absolute, so it paints over the border without moving anything.
-    const panel = (key: string, title: string, color: string, rows: RenderChildren, pad = 1) => (
+    // `extra` sits in the border after the title (the Grimoire's size button).
+    const panel = (key: string, title: string, color: string, rows: RenderChildren, pad = 1, extra?: RenderChildren) => (
       <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={pad}>
         <Box position="absolute" top={-1} left={0}>
           <Text color={color} bold>{` ${title} `}</Text>
+          {extra}
         </Box>
         {rows}
       </Box>
@@ -1995,7 +2197,10 @@ export const register: Register = on => {
       ].filter(Boolean)
       const livePod = p && !p.phase.startsWith('DONE') ? p : null
       if (inline) {
-        const parts = [`ctx ${Math.round(ctx)}%`, ...gauges.limits.map(l => `${LIMIT_LABEL[l.kind] ?? l.kind} ${Math.round(l.pct)}%`), ...facts]
+        const parts = [`ctx ${Math.round(ctx)}%`, ...gauges.limits.map(l => {
+            const left = forecast(l)
+            return `${LIMIT_LABEL[l.kind] ?? l.kind} ${Math.round(l.pct)}%${left === null ? '' : ` ${fmtEta(left)}`}`
+          }), ...facts]
         return (
           <Text dimColor wrap="truncate-end">
             {parts.join(' · ')}
@@ -2010,9 +2215,16 @@ export const register: Register = on => {
             'subtle',
             <Box flexDirection="column">
               {row('ctx', ctx, tok, 'm-ctx')}
-              {gauges.limits.map(l =>
-                row(LIMIT_LABEL[l.kind] ?? l.kind, l.pct, l.reset ? 'new window' : l.resetsAt ? `resets ${resetTime(l.resetsAt, switches.time)}` : '', `m-${l.kind}`),
-              )}
+              {gauges.limits.map(l => {
+                const left = forecast(l)
+                return row(
+                  LIMIT_LABEL[l.kind] ?? l.kind,
+                  l.pct,
+                  l.reset ? 'new window' : l.resetsAt ? `resets ${resetTime(l.resetsAt, switches.time)}` : '',
+                  `m-${l.kind}`,
+                  left === null ? undefined : { text: `limit in ${fmtEta(left)}`, urgent: left < 30 * 60_000 },
+                )
+              })}
               <Text dimColor wrap="truncate-end">
                 {facts.join(' · ')}
               </Text>
@@ -2036,7 +2248,9 @@ export const register: Register = on => {
           {tabButton('tab-help', 'Help', 'h', () => void startTour($))}
           {tabButton('tab-arena', 'Arena', 'a', () => void update($, tab, () => 'arena' as Tab), view === 'arena')}
           <Text>
-            <Text color="warning">{running}▶</Text> <Text color="success">{done}✓</Text>{' '}
+            <Text color="warning">{running}▶</Text>{' '}
+            {waiting > 0 && <Text color="suggestion">{`${waiting}◎ `}</Text>}
+            <Text color="success">{done}✓</Text>{' '}
             <Text color={failed ? 'error' : 'subtle'}>{failed}✕</Text> <Text dimColor>${cost.toFixed(2)}</Text>
           </Text>
           {setReport.problems.length > 0 && (
@@ -2081,6 +2295,8 @@ export const register: Register = on => {
       onPress: (press: { surface: CopySurface }) => void
       // A running card the deck launched: its STOP button (x while the ring is on the card).
       stop?: { key: string; hotkey?: string; onPress: () => void }
+      // Grimoire cards only (cards.size); live cards are always full.
+      size?: CardSize
     }) => {
       const hot = lit(o.key)
       const stopButton = o.stop && (
@@ -2108,6 +2324,20 @@ export const register: Register = on => {
           named
         )
       }
+      // Mini: one line, a glyph in the sprite's main colour and the name; the
+      // ring inverts the name, as the inline cards do.
+      if (o.size === 'mini') {
+        return (
+          <Box key={`box-${o.key}`} flexDirection="row" width={CARD_SIZES.mini.width}>
+            <Text color={mainColour(o.art, PALETTE) ?? 'subtle'}>{'● '}</Text>
+            <Button key={o.key} hotkey={keyed(o.hotkey)} plain onPress={o.onPress}>
+              <Text bold={hot} inverse={hot} color={hot ? undefined : o.color === 'subtle' ? 'text' : o.color}>
+                {cell(o.name, o.hotkey && keyed(o.hotkey) ? 6 : 9).trimEnd()}
+              </Text>
+            </Button>
+          </Box>
+        )
+      }
       return (
         <Box
           key={`box-${o.key}`}
@@ -2115,9 +2345,9 @@ export const register: Register = on => {
           alignItems="center"
           borderStyle={hot ? 'double' : 'round'}
           borderColor={hot ? 'claude' : o.color}
-          width={10}
+          width={CARD_SIZES.full.width}
         >
-          {sprite(o.art, o.key)}
+          {sprite(o.size === 'compact' ? halfHeight(o.art) : o.art, o.key)}
           <Button key={o.key} hotkey={keyed(o.hotkey)} plain onPress={o.onPress}>
             <Text bold={hot} inverse={hot}>
               {cell(o.name, o.hotkey && keyed(o.hotkey) ? 5 : 8).trimEnd()}
@@ -2159,7 +2389,8 @@ export const register: Register = on => {
     // rows) and the line wrapped in what is left; inline a single line.
     const grimBlock = (() => {
       if (!grimUp || !switches.grim.enabled || now >= grimUp.until) return null
-      const color = grimUp.event === 'done' || grimUp.event === 'thanks' ? 'success' : 'error'
+      const color =
+        grimUp.event === 'done' || grimUp.event === 'thanks' ? 'success' : grimUp.event === 'waiting' ? 'suggestion' : 'error'
       const report = reportUp && (
         <Button
           key="grim-report"
@@ -2326,8 +2557,9 @@ export const register: Register = on => {
         </Box>
       )
 
-      const dexCards = shown.map((d, i) =>
+      const dexCards = (size: CardSize) => shown.map((d, i) =>
         card({
+          size,
           key: `card-${d.id}`,
           art: artOf(d, d.type ?? d.id),
           name: d.short ?? d.name,
@@ -2368,6 +2600,29 @@ export const register: Register = on => {
         switches.stop.enabled && mine.includes(a.id) && !ENDED.has(a.status) && !halts[a.id]
       const ringOn = (a: TrackedAgent) => focused === `agent-${a.id}` || focused === `stop-${a.id}`
       const stopKeyOn = !arming && live.some(a => canStop(a) && ringOn(a))
+      // The ring on a waiting card (not one the deck is stopping).
+      const waitRing = live.some(a => a.status === 'waiting' && !halts[a.id] && ringOn(a))
+      // Transcript peek (v): the engine's own view of the agent, opened only
+      // from a press (the person's input). Finished cards get v in the answer
+      // box instead: the engine may no longer list them.
+      const peekAt = focused === PEEK_BUTTON ? peekFor : (live.find(a => !ENDED.has(a.status) && ringOn(a))?.id ?? null)
+      peekFor = peekAt
+      const peekOf = arming || !peekAt ? undefined : live.find(a => a.id === peekAt && !ENDED.has(a.status))
+      const peek = async (a: TrackedAgent) => {
+        // Some hosts and tests leave view out.
+        const viewing = e.props.view?.agentId === a.id
+        const shown: UiViewResult = await $.ui
+          .view(viewing ? {} : { agentId: a.id })
+          .catch((err: unknown) => ({ deny: errMessage(err) }))
+        debug($, 'peek', { agentId: a.id, back: viewing, deny: shown.deny })
+        void $.ui.toast(
+          shown.deny
+            ? `Transcript not shown: ${shown.deny}`
+            : viewing
+              ? 'Back to the main conversation'
+              : `Showing ${a.description}'s transcript. Your next prompt goes to this agent: v on its card goes back.`,
+        )
+      }
       // The result box's two actions, each always ending in a toast (B1, B2).
       const putAnswer = async (a: TrackedAgent) => {
         const text = said[a.id] ?? ''
@@ -2419,7 +2674,9 @@ export const register: Register = on => {
           sub:
             halts[a.id] && !ENDED.has(a.status)
               ? halts[a.id] === 'pending' ? 'stopping' : 'stopped'
-              : `${GLYPH[a.status] ?? '?'} ${a.status === 'running' ? age(a) : tokens(a.id)}`,
+              : a.status === 'waiting'
+                ? waitBadge(a.waitSince ?? a.firstSeen, now)
+                : `${GLYPH[a.status] ?? '?'} ${a.status === 'running' ? age(a) : tokens(a.id)}`,
           color: agentOf?.id === a.id ? 'warning' : (COLOR[a.status] ?? 'subtle'),
           // The ring may stay on the card when the box opens (the focus move
           // can land before the box is drawn): Enter there again puts the
@@ -2475,6 +2732,16 @@ export const register: Register = on => {
             </Box>
           </Box>
         )
+      } else if (peekOf) {
+        const a = peekOf
+        const viewing = e.props.view?.agentId === a.id
+        action = (
+          <Button key={PEEK_BUTTON} hotkey={keyed('v')} plain onPress={() => void peek(a).catch(onFail($, 'peek.error'))}>
+            <Text color="suggestion" inverse={lit(PEEK_BUTTON)} wrap="truncate-end">
+              {viewing ? '[v] back to main view' : `[v] transcript: ${cell(a.description, 24).trimEnd()}`}
+            </Text>
+          </Button>
+        )
       } else if (arming?.kind === 'result' && agentOf) {
         const text = said[agentOf.id] ?? ''
         const cut = /\[truncated: first \d+ of \d+ characters\]$/.test(text)
@@ -2497,6 +2764,9 @@ export const register: Register = on => {
               <Button key="ans-copy" hotkey={keyed('c')} plain onPress={press => void copyAnswer(agentOf, press.surface)}>
                 <Text dimColor inverse={lit('ans-copy')}>copy</Text>
               </Button>
+              <Button key="ans-view" hotkey={keyed('v')} plain onPress={() => void peek(agentOf).catch(onFail($, 'peek.error'))}>
+                <Text dimColor inverse={lit('ans-view')}>{e.props.view?.agentId === agentOf.id ? 'back' : 'view'}</Text>
+              </Button>
               <Button key="ans-close" hotkey={keyed('x')} plain onPress={() => void arm($, null)}>
                 <Text dimColor>close</Text>
               </Button>
@@ -2508,34 +2778,45 @@ export const register: Register = on => {
       const f = focused ?? ''
       const focusedLink = entries.find(d => `card-${d.id}` === f)?.link
       if (arming?.kind === 'message') hint = 'Type, then Enter sends · empty Enter cancels'
-      else if (arming?.kind === 'result') hint = 'Enter puts the answer in the prompt · c copy · x close'
-      else if (arming?.kind === 'stop') hint = 'Enter on Keep (or x) keeps it · Tab to Stop, Enter stops it'
+      else if (arming?.kind === 'result')
+        hint = `Enter puts the answer in the prompt · c copy · v ${e.props.view?.agentId === arming.agentId ? 'back to main' : 'transcript'} · x close`
+      else if (arming?.kind === 'stop') hint = 'Enter on Keep (or x) keeps it · Tab or → to Stop, Enter stops it'
       else if (f === LAUNCH) hint = `Type the task for ${chosen?.name ?? 'the target'}, Enter ${chosen?.fill ? 'fills the prompt' : 'launches'}`
       else if (f === FILTER) hint = 'Type to filter the dex by name · Tab to the cards'
-      else if (focusedLink) hint = `Enter: open ${focusedLink.title} in your browser · Tab/arrows: next card`
-      else if (f.startsWith('card-')) hint = 'Enter: make it the launch target (type the task) · Tab/arrows: next card'
-      else if (stopKeyOn) hint = 'Enter: message it · x: stop it (asks Stop / Keep first)'
-      else if (f.startsWith('agent-')) hint = 'Enter: message it (running) or read its answer (finished)'
+      else if (focusedLink) hint = `Enter: open ${focusedLink.title} in your browser · arrows or Tab: move`
+      else if (f.startsWith('card-')) hint = 'Enter: make it the launch target (type the task) · arrows or Tab: move'
+      else if (waitRing)
+        hint = `Enter: message it · v: transcript${stopKeyOn ? ' · x: stop' : ''} · waiting: a plan to approve, or its own work`
+      else if (stopKeyOn) hint = 'Enter: message it · v: transcript · x: stop it (asks Stop / Keep first)'
+      else if (f === PEEK_BUTTON)
+        hint = peekOf && e.props.view?.agentId === peekOf.id
+          ? 'Enter or v: back to the main conversation'
+          : 'Enter or v: show its transcript in the main view (your next prompt goes to it)'
+      else if (f.startsWith('agent-')) hint = 'Enter: message it (running) or read its answer (finished) · v: transcript (running)'
       else if (f.startsWith('tab-')) hint = 'Enter switches view · Tab moves on to the launch box'
       else if (f.startsWith('cat-')) hint = 'Enter filters the dex by this category'
+      else if (f === SIZE_BUTTON) hint = 'Enter or z: card size auto, full, compact, mini (this session)'
       else if (f.startsWith('recent-')) hint = 'Enter: load this task and agent into the launch box'
       else
         hint = e.props.isFocused
-          ? 'Tab / Shift+Tab or arrows · Enter picks · 1-9 cards · Esc prompt'
+          ? 'arrows or Tab move · Enter picks · 1-9 cards · Esc prompt'
           : 'ctrl+x Tab (or click) to use the deck · /grimling-tour for help'
 
       // Docked, the deck fits the pane's rows: recent runs, then Grimoire
       // rows, give way so the engine never scrolls the tab bar out (B4).
-      const perRow = Math.max(1, Math.floor((width - 2) / 10))
+      // Grimoire cards shrink first (cards.size auto, z): full, compact, mini.
+      // Live cards are always full, 10 wide.
+      const perRow = Math.max(1, Math.floor((width - 2) / CARD_SIZES.full.width))
       const userCards = entries.some(d => d.source === 'user' || d.source === 'project')
       const answerLines = (said[agentOf?.id ?? ''] ?? '').split('\n').length
       const actionRows =
         arming?.kind === 'result' ? 4 + Math.min(6, answerLines)
           : arming?.kind === 'stop' ? 6
           : arming?.kind === 'message' ? 1
+          : peekOf ? 1
           : 0
       const fixed =
-        3 + (width < 44 ? 1 : 0) + // tab bar panel
+        3 + (width < 44 ? 1 : 0) + (waiting > 0 && width < 56 ? 1 : 0) + // tab bar panel (the waiting count may wrap)
         (gauges ? 4 + gauges.limits.length + (p && !p.phase.startsWith('DONE') ? 4 : 0) : 0) +
         (grimBlock ? 6 : 0) +
         (nudgeOn ? 1 : 0) +
@@ -2544,16 +2825,39 @@ export const register: Register = on => {
         3 + (width < 60 ? 1 : 0) + (Input ? 1 : 0) + (userCards ? 0 : 2) + // grimoire chrome
         2 + actionRows + (live.length ? Math.ceil(live.length / perRow) * 9 : 2) + // agents panel
         2 + (past.length ? 0 : 2) // recent chrome
+      const sizeMode: SizeMode = sizeSet ?? switches.cards.size
+      const fitAt = (mode: SizeMode, cards = shown.length) =>
+        fitSized({
+          // The padding's "more" row takes one row of the window.
+          budget: (e.props.scroll?.bodyRows ?? Math.max(10, (e.viewport?.rows ?? 40) - 4)) - (padTo ? 1 : 0),
+          fixed,
+          cards,
+          inner: width - 2,
+          recent: past.length,
+          mode,
+        })
+      // While the find box filters, auto keeps the size the unfiltered list
+      // (this category) gets, so the cards do not grow and shrink with every
+      // keystroke; once the find box is cleared that is the size again.
+      const unfound = q ? entries.filter(d => cat === 'all' || d.cat === cat).length : shown.length
+      const autoFit = q ? fitAt(fitAt('auto', unfound).size) : fitAt('auto')
+      // Inline the cards are one-line buttons at any size.
       const fit = inline
-        ? { cards: shown.length, recent: past.length }
-        : fitDeck({
-            budget: e.props.scroll?.bodyRows ?? Math.max(10, (e.viewport?.rows ?? 40) - 4),
-            fixed,
-            cards: shown.length,
-            perRow,
-            cardH: 7,
-            recent: past.length,
-          })
+        ? { size: 'full' as CardSize, cards: shown.length, recent: past.length }
+        : sizeMode === 'auto' ? autoFit : fitAt(sizeMode)
+      const cycleSize = () =>
+        void (async () => {
+          const to = nextMode(sizeMode)
+          await update($, cardSize, () => to)
+          await $.ui.toast(to === 'auto' ? `Cards: auto (${autoFit.size} fits now) · z cycles` : `Cards: ${to} · z cycles`)
+        })().catch(onFail($, 'size.error'))
+      const sizeButton = (
+        <Button key={SIZE_BUTTON} hotkey={keyed('z')} plain onPress={cycleSize}>
+          <Text color={lit(SIZE_BUTTON) ? 'claude' : 'subtle'} inverse={lit(SIZE_BUTTON)}>
+            {sizeMode === 'auto' ? `auto·${fit.size}` : fit.size}
+          </Text>
+        </Button>
+      )
       const cardAt = shown.findIndex(d => `card-${d.id}` === focused)
       const cardWin = windowAt(shown.length, fit.cards, cardAt >= 0 ? cardAt : shown.findIndex(d => d.id === chosen?.id))
       const cardsCut = shown.length - (cardWin.end - cardWin.start)
@@ -2561,7 +2865,7 @@ export const register: Register = on => {
       const grid = shown.length ? (
         <Box flexDirection="column">
           <Box flexDirection="row" flexWrap="wrap">
-            {dexCards.slice(cardWin.start, cardWin.end)}
+            {dexCards(fit.size).slice(cardWin.start, cardWin.end)}
           </Box>
           {cardsCut > 0 && (
             <Text dimColor wrap="truncate-end">{`${cardsCut} more card${cardsCut === 1 ? '' : 's'}: find, a category, or Tab`}</Text>
@@ -2677,6 +2981,7 @@ export const register: Register = on => {
               )}
             </Box>,
             0,
+            sizeButton,
           )}
           {panel(
             'p-agents',
@@ -3221,7 +3526,7 @@ export const register: Register = on => {
       hint = 'Tab to Deck and Enter to go back'
     }
 
-    return (
+    const tree = (
       <Box flexDirection="column">
         {inline ? header : panel('p-tabs', 'grimling', e.props.isFocused ? 'claude' : 'subtle', header)}
         {meterBlock}
@@ -3229,6 +3534,16 @@ export const register: Register = on => {
         {body}
         {footer(hint)}
       </Box>
+    )
+    navLayout = switches.keys.arrows ? navRows(tree, e.props.bodyColumns) : []
+    navGrid = navLayout.map(row => row.filter(k => !navSkip(k))).filter(row => row.length > 0)
+    // Docked, keys.arrows pads the tree past the window (see ARROW_PAD).
+    return padTo ? (
+      <Box flexDirection="column" minHeight={padTo}>
+        {tree}
+      </Box>
+    ) : (
+      tree
     )
     } catch (err) {
       debug($, 'render.error', String(err instanceof Error ? (err.stack ?? err.message) : err))

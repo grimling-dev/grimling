@@ -42,3 +42,45 @@ export function windowAt(count: number, n: number, at: number): { start: number;
   const start = at < 0 ? 0 : Math.max(0, Math.min(count - n, at - Math.floor(n / 2)))
   return { start, end: start + n }
 }
+
+// Grimoire card sizes (cards.size). Full is the 8x8 sprite in half blocks
+// (four text rows) over the name, in a border: 10 wide, 7 tall. Compact is
+// the same sprite at half height (two text rows, each half block four pixel
+// rows), same border and label: 10 wide, 5 tall. Mini is one line, a glyph
+// in the sprite's main colour and the short name: 12 wide, 1 tall. Live
+// agent cards are always full.
+export type CardSize = 'full' | 'compact' | 'mini'
+export type SizeMode = 'auto' | CardSize
+
+export const CARD_SIZES: Record<CardSize, { width: number; height: number }> = {
+  full: { width: 10, height: 7 },
+  compact: { width: 10, height: 5 },
+  mini: { width: 12, height: 1 },
+}
+const LARGEST_FIRST: CardSize[] = ['full', 'compact', 'mini']
+
+// z cycles the session's mode: auto, full, compact, mini, auto.
+export function nextMode(m: SizeMode): SizeMode {
+  const order: SizeMode[] = ['auto', 'full', 'compact', 'mini']
+  return order[(order.indexOf(m) + 1) % order.length] ?? 'auto'
+}
+
+export type SizedFit = { size: CardSize; perRow: number; cards: number; recent: number }
+
+// The card size to draw and what fits at it. `inner` is the columns the
+// Grimoire's card grid has. Auto takes the largest size at which every
+// shown card fits (recent runs give way first, as fitDeck does); when even
+// mini cannot hold them all, mini with fitDeck's "N more" cut. A set size
+// is drawn as set, cut the same way when it does not fit.
+export function fitSized(o: Omit<FitInput, 'perRow' | 'cardH'> & { inner: number; mode: SizeMode }): SizedFit {
+  const at = (size: CardSize): SizedFit => {
+    const perRow = Math.max(1, Math.floor(o.inner / CARD_SIZES[size].width))
+    return { size, perRow, ...fitDeck({ ...o, perRow, cardH: CARD_SIZES[size].height }) }
+  }
+  if (o.mode !== 'auto') return at(o.mode)
+  for (const size of LARGEST_FIRST) {
+    const f = at(size)
+    if (f.cards >= o.cards) return f
+  }
+  return at('mini')
+}

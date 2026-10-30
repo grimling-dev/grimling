@@ -66,6 +66,7 @@ Grim, the mascot, pops up with a speech bubble when an agent ends.
 |---|---|---|---|
 | `grim.enabled` | `true` | `true`, `false` | Turns Grim on or off. The old form `"grim": false` still works. |
 | `grim.seconds` | `8` | whole number 2 to 30 | How long Grim stays up. |
+| `grim.waiting` | `true` | `true`, `false` | Grim pops up when an agent starts waiting (once per wait, at most once a minute per agent; built-in lines). The card's `wait 32s` badge and the `◎ N waiting` count show either way. |
 | `grim.lines.done` | `[]` | up to 20 lines, each at most 120 characters | Your own lines when an agent finishes. Empty uses the built-in lines. |
 | `grim.lines.failed` | `[]` | same | Your own lines when an agent fails. |
 | `grim.lines.killed` | `[]` | same | Your own lines when an agent is stopped. |
@@ -94,6 +95,17 @@ Which cards the Grimoire shows. A project file may set these.
 | `cards.project` | `true` | `true`, `false` | The project's `.claude/agents` and `.claude/grimling/templates`. |
 | `cards.packs` | `[]` | up to 20 entries of `{ "path": "...", "ns": "..." }` | Extra agent packs. `ns` is optional. See [PACKS.md](PACKS.md). |
 | `cards.hide` | `[]` | card ids or agent types, each at most 100 characters | Cards to leave out, such as `"scout"`, `"swarm"`, `"workflows"` (the Workflows card, a link to the community Claude Workflow Library), `"agent-research-scout"` or `"grimling:research-scout"`. |
+| `cards.size` | `"auto"` | `"auto"`, `"full"`, `"compact"`, `"mini"` | Grimoire card size in the docked pane. `auto` takes the largest size at which every shown card fits (typing in the find box does not change it); `full`, `compact` or `mini` always draws that size. See below. |
+
+Card sizes (`cards.size`):
+
+- `full`: the card's 8x8 pixel sprite (four text rows of half blocks) over its name, in a border. 10 columns wide, 7 rows tall.
+- `compact`: the same sprite at half height (two text rows; each pair of pixel rows becomes one), the same border and name. 10 wide, 5 tall.
+- `mini`: one line, a dot in the sprite's main colour and the short name. 12 wide, so three across a 44-column pane.
+- `auto` works out the room the Grimoire has after the tab bar, meter, launch box, chips, find box, live agent cards and the bottom row. Recent runs give way first (down to one row), then it takes `full`, else `compact`, else `mini`, whichever is the largest that shows every card the filter lets through. When even `mini` cannot, it draws `mini` with the dim "N more cards" line, as before.
+- Live agent cards (the running and finished ones under "agents") are always full size.
+- `z` cycles auto, full, compact, mini for this session (a toast says which; for auto it names the size that fits now). The label in the Grimoire's top border shows the size (`auto·compact`); Tab to it and Enter does the same. `z` is off while a text box has the ring. The setting is the size each new session starts with.
+- The inline pane keeps its one-line cards at any setting.
 
 ### templates
 
@@ -102,6 +114,40 @@ Template cards fill the prompt with text. They never start an agent on their own
 | Key | Default | Allowed | What it does |
 |---|---|---|---|
 | `templates.enabled` | `["swarm"]` | template ids (a-z, 0-9 and `-`) | Which templates get a card, in this order. See [PACKS.md](PACKS.md). |
+
+### keys
+
+How the keyboard moves around the pane.
+
+| Key | Default | Allowed | What it does |
+|---|---|---|---|
+| `keys.arrows` | `true` | `true`, `false` | Arrow keys move the focus ring to the item above, below or beside it in the docked pane. `false`: arrows behave as before. Tab and Shift+Tab are the same either way. |
+
+With `keys.arrows` on, in the docked pane:
+
+- `↑` `↓` go to the row above or below: tab bar, launch box, chips, find box, Grimoire rows, live agents, recent runs, the bottom row. In the card grids the column is kept where the next row has one, else the ring lands on that row's last card; the column is kept through a one-item row in between.
+- `←` `→` go along a row: tabs, chips, cards, live agents, dialog buttons.
+- At an edge the ring stays. Nothing wraps.
+- In a text box (launch box, message box, find box) `←` `→` move the text cursor. `↑` `↓` leave the box to the row above or below, as from any other item (not in Tab order: `↑` from the find box goes to the first chip, not the last).
+- In the Stop / Keep confirm and the answer box, every arrow stays on that box's buttons.
+- STOP buttons are not on the arrow path: `x` stops the card under the ring (Stop / Keep first), and Tab still reaches STOP. The card size label in the Grimoire's border is off the path the same way (`z` and Tab reach it), and so is the `[v] transcript` row under a live card (`v` and Tab reach it). An arrow from either moves on from where it is drawn: `↑` from STOP goes back to its card, `↓` from the size label into the Grimoire.
+- Enter presses what has the ring. Esc hands the keyboard back to the prompt.
+
+How it works, and its limits (Claude Code 2.1.312):
+
+- Claude Code does not tell a pane which key moved the ring, and it gives a pane `↑` `↓` only as a scroll while the pane's content is taller than the pane. So with `keys.arrows` on, Grimling keeps the docked deck one row taller than the pane and turns those scrolls into moves. You may see Claude Code's dim "more" row at the bottom of the pane; it is that padding. A view taller than the pane on its own (a long Keys or Setup view) still scrolls when an arrow reaches its top or bottom item. The mouse wheel and Page Up / Page Down scroll as before.
+- Claude Code binds no `←` `→` in a pane, so they need one keybinding, once. Add this block to the `bindings` list in `~/.claude/keybindings.json` (create the file if it does not exist):
+
+  ```json
+  {
+    "bindings": [
+      { "context": "Pane", "bindings": { "left": "pane:top", "right": "pane:bottom" } }
+    ]
+  }
+  ```
+
+  Grimling reads those as left and right. Home and End reach a pane as the very same scroll, so with `keys.arrows` on they move left and right too (binding or not). In a text box Grimling drops that scroll: Home and End neither move the ring nor scroll the pane there. A pane cannot hand a key on to the box, so they do not move its text cursor either, unless Claude Code gives them to the box first.
+- The inline pane (a narrow terminal) is not padded: there `↑` `↓` walk in Tab order as before.
 
 ### pods
 
