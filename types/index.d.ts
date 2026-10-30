@@ -27,6 +27,11 @@ export type DexEntry = {
   what: string
   cat: string
   art?: string[]
+  // A link card (Workflows): Enter opens this page in the default browser.
+  // It never launches an agent and never fills the prompt.
+  link?: { url: string; title: string }
+  // A second line under the card's dex entry.
+  note?: string
   source: 'builtin' | 'pack' | 'user' | 'project'
 }
 

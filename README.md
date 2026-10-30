@@ -35,6 +35,7 @@ Then run `/reload-plugins` (or start a new session) and type `/grimling`. Update
 - **The Grimoire.** A filterable grid of agent cards: the built-in agent types (Scout, Builder, Planner, Fetcher, Guide), every agent file in `~/.claude/agents` and in the project's `.claude/agents`, and agent packs you add in `cards.packs`. Agents without art get a generated pixel creature. Category chips and a `/` name filter.
 - **Launch in one line.** Pick a card, type the task, Enter starts it. A refused launch keeps the task in the box. Recent runs can be put back in the launch box to run again.
 - **Template cards.** Swarm (and any template in `templates.enabled`) only fills a request into your prompt, so you and the main session decide what runs.
+- **Workflows card.** Opens the [Claude Workflow Library](https://www.claudeworkflows.org/), a community index of Claude workflows run by the r/ClaudeAI moderators, in your browser. Grimling only links to it (unofficial, not affiliated); `cards.hide: ["workflows"]` hides it.
 - **Live agent cards.** Running agents get their own cards: Enter, type, Enter sends a message. Finished ones show their answer; Enter adds it after your prompt draft, `c` copies it.
 - **Stop button.** `x` or STOP on a running agent the deck launched opens a Stop / Keep confirm (Keep is the default). The stop goes through Claude Code's permission check. `stop.enabled: false` hides it.
 - **Flow, Table and Mermaid.** Who spawned whom, every run as a table, and the agent graph copied as a Mermaid diagram.
@@ -83,7 +84,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). In short: load a clone with `claude --pl
 
 ## Roadmap
 
-Now (v0.1.0, early access): tests pass on Windows, Linux and macOS in CI; the GPU swarm setup guide; feedback through `/grimling-feedback`. Next: a demo video, more agent packs, a live try on macOS, Arena tuning. Later: a prompt library with `@` shortcuts, saved Mermaid diagrams, a "needs you" queue and richer notification rules, per-agent cost bars, one pane for every terminal. Order can change.
+Now (v0.2.0, early access): the Workflows card that opens the community Claude Workflow Library; clearer live cards; tests pass on Windows, Linux and macOS in CI; the GPU swarm setup guide; feedback through `/grimling-feedback`. Next: a demo video, more agent packs, a live try on macOS, Arena tuning. Later: save a community workflow as your own recipe card, credited and linked to its author; a prompt library with `@` shortcuts, saved Mermaid diagrams, a "needs you" queue and richer notification rules, per-agent cost bars, one pane for every terminal. Order can change.
 
 ## License and contact
 

@@ -179,6 +179,7 @@ const SPRITES: Record<string, string[]> = {
   fetcher: ['b......b', 'bb....bb', '.bbbbbb.', '.bwbbwb.', '.bbkkbb.', '..brrb..', '.bbbbbb.', '.b.bb.b.'],
   guide: ['..yyyy..', '.yyyyyy.', '.ywyyyy.', '.yyyyyy.', '..yyyy..', '...kk...', '..kkkk..', '...kk...'],
   swarm: ['.yk..yk.', 'ykyk.yky', '.yk..yk.', '........', '..yk..yk', '.ykyk.yk', '..yk..yk', '........'],
+  workflows: ['.bbbbbb.', 'bssssssb', '.skksks.', '.ssssss.', '.sksskk.', '.sssrss.', 'bssssssb', '.bbbbbb.'],
   gpu: ['.c.c.c.c', 'cccccccc', 'ckkkkkkc', 'ckgggkkc', 'ckgggkkc', 'ckkkkkkc', 'cccccccc', '.c.c.c.c'],
 }
 
@@ -216,6 +217,9 @@ const GRIM_LINES: Record<GrimSay['event'], string[]> = {
 const GRIM_TICK_MS = 400
 const GRIM_WAVE_MS = 2400
 
+// The Workflows card's page: a community index of Claude workflows.
+const WORKFLOWS_URL = 'https://www.claudeworkflows.org/'
+
 // Built-in dex entries, numbered first (cards.builtins). Swarm is a template
 // (templates/swarm.md); names and art for agent files come from dex.json.
 const BUILTINS: Omit<DexEntry, 'no'>[] = [
@@ -224,6 +228,18 @@ const BUILTINS: Omit<DexEntry, 'no'>[] = [
   { id: 'planner', name: 'Planner', short: 'Plan', type: 'Plan', what: 'design a plan', cat: 'code', source: 'builtin' },
   { id: 'fetcher', name: 'Fetcher', short: 'Fetch', type: 'web-fetch', what: 'read a URL', cat: 'web', source: 'builtin' },
   { id: 'guide', name: 'Guide', type: 'claude-code-guide', what: 'Claude Code and API answers', cat: 'research', source: 'builtin' },
+  // A link card: Enter opens the page in the browser. Grimling only links to
+  // it: it never fetches, copies or caches the library's content.
+  {
+    id: 'workflows',
+    name: 'Workflows',
+    short: 'Lore',
+    what: 'community Claude Workflow Library',
+    cat: 'research',
+    link: { url: WORKFLOWS_URL, title: 'the Claude Workflow Library' },
+    note: 'Run by the r/ClaudeAI moderators. Unofficial, not affiliated: Grimling only links to it.',
+    source: 'builtin',
+  },
 ]
 
 // A creature for any agent without drawn art: a seeded, mirrored 8x8 sprite.
@@ -597,6 +613,7 @@ async function loadDex($: EngineInterface) {
       name: printable(d.name),
       what: printable(d.what),
       ...(d.short === undefined ? {} : { short: printable(d.short) }),
+      ...(d.note === undefined ? {} : { note: printable(d.note) }),
       no: i + 1,
     }))
   // One debug line when what the load found changes, not every 30 s.
@@ -906,6 +923,19 @@ async function openUrl($: EngineInterface, url: string): Promise<boolean> {
 }
 
 type CopySurface = Parameters<EngineInterface['ui']['copy']>[0]['surface']
+
+// A link card (Workflows): opens its page in the browser, or with no browser
+// copies the link. It launches nothing and leaves the prompt alone.
+async function openLink($: EngineInterface, link: { url: string; title: string }, surface: CopySurface) {
+  const opened = await openUrl($, link.url)
+  if (!opened) await $.ui.copy({ text: link.url, surface }).catch(() => undefined)
+  $.ui.toast(
+    opened
+      ? `Opened ${link.title} in your browser`
+      : `Could not open the browser: the link to ${link.title} is copied. Paste it into your browser.`,
+  )
+  debug($, 'link.open', { url: link.url, opened })
+}
 
 // Send: opens the pre-filled form (or, when too long for a link, copies the
 // text and opens the empty form); with no browser the link is copied. Grim
@@ -1271,6 +1301,7 @@ const STEPS: Step[] = [
   { keys: 'Enter on a live agent', what: 'running: type a message; finished: read its answer', view: 'deck' },
   { keys: 'x on a running card', what: 'stop an agent the deck launched (Stop / Keep first)', view: 'deck' },
   { keys: 'Swarm', what: 'fill the prompt with a swarm request; send it with Enter', view: 'deck' },
+  { keys: 'Workflows', what: 'open the community Claude Workflow Library in your browser (a link only)', view: 'deck' },
   { keys: 'agent-dex skill', what: 'say "collect agent types": saves specialized runs as agents', view: 'deck' },
   { keys: 'Esc', what: 'hand the keyboard back to the prompt', view: 'deck' },
   { keys: 'ctrl+x Tab', what: 'take the keyboard from the prompt into the deck', view: 'deck' },
@@ -1419,6 +1450,30 @@ function bar(fraction: number, width: number): string {
 
 function cell(text: string, width: number): string {
   return text.length > width ? `${text.slice(0, width - 1)}…` : text.padEnd(width)
+}
+
+// Words that say nothing on an 8-column card label (S4): "Give the Grimling
+// landing page" reads "landing…", not "Give th…".
+const FILLER = new Set(['a', 'an', 'the', 'to', 'of', 'for', 'and', 'on', 'in', 'my', 'our', 'please', 'give', 'grimling', "grimling's"])
+
+function cardLabel(task: string): string {
+  const words = task.trim().split(/\s+/).filter(Boolean)
+  const kept = words.filter(w => !FILLER.has(w.toLowerCase().replace(/[^a-z']/g, '')))
+  return (kept.length > 0 ? kept : words).join(' ')
+}
+
+// Labels for a row of live cards: cards whose cut labels would read the same
+// get a number, so no two cards look alike (S4).
+function cardLabels(tasks: string[], width: number): string[] {
+  const base = tasks.map(cardLabel)
+  const cut = base.map(b => cell(b, width).trimEnd())
+  const seen = new Map<string, number>()
+  return base.map((b, i) => {
+    if (cut.filter(c => c === cut[i]).length < 2) return b
+    const n = (seen.get(cut[i]) ?? 0) + 1
+    seen.set(cut[i], n)
+    return `${cell(b, width - 2).trimEnd()} ${n}`
+  })
 }
 
 function shortTitle(task: string): string {
@@ -2023,7 +2078,7 @@ export const register: Register = on => {
       sub?: string
       color: string
       hotkey?: string
-      onPress: () => void
+      onPress: (press: { surface: CopySurface }) => void
       // A running card the deck launched: its STOP button (x while the ring is on the card).
       stop?: { key: string; hotkey?: string; onPress: () => void }
     }) => {
@@ -2155,10 +2210,14 @@ export const register: Register = on => {
           (cat === 'all' || d.cat === cat) &&
           (!q || `${d.name} ${d.type ?? ''} ${d.what}`.toLowerCase().includes(q)),
       )
-      const chosen = entries.find(d => d.id === aim) ?? entries[1] ?? entries[0]
+      // A link card is never the launch target.
+      const targets = entries.filter(d => !d.link)
+      const chosen = targets.find(d => d.id === aim) ?? targets[1] ?? targets[0]
       const byType = (type: string) => cardForType(entries, type)
-      const live = [...list.filter(a => !ENDED.has(a.status)), ...list.filter(a => ENDED.has(a.status)).reverse()]
-        .slice(0, inline ? 6 : 12)
+      const allLive = [...list.filter(a => !ENDED.has(a.status)), ...list.filter(a => ENDED.has(a.status)).reverse()]
+      const live = allLive.slice(0, inline ? 6 : 12)
+      // Cards past the cap are counted, so the totals in the footer match (S1).
+      const liveCut = allLive.length - live.length
       const agentOf = arming ? list.find(a => a.id === arming.agentId) : undefined
 
       // The draft is cleared only once the task went somewhere; a refused
@@ -2274,11 +2333,13 @@ export const register: Register = on => {
           name: d.short ?? d.name,
           color: d.id === chosen?.id ? 'warning' : d.fill ? 'suggestion' : 'subtle',
           hotkey: i < 9 ? String(i + 1) : undefined,
-          onPress: () =>
+          // A link card opens its page; it never becomes the launch target.
+          onPress: press =>
             void (async () => {
+              if (d.link) return openLink($, d.link, press.surface)
               await update($, target, () => d.id)
               await focusOn($, LAUNCH)
-            })(),
+            })().catch(onFail($, 'card.error')),
         }),
       )
 
@@ -2290,9 +2351,14 @@ export const register: Register = on => {
           <Text color="warning">#{String(about.no).padStart(3, '0')}</Text> <Text bold>{about.name}</Text>
           <Text dimColor>
             {' · '}
-            {about.what} · {about.fill ? 'fills the prompt' : about.type}
+            {about.what} · {about.link ? 'opens in your browser' : about.fill ? 'fills the prompt' : about.type}
             {about.tag ? ` · ${about.tag}` : about.source === 'builtin' ? '' : ` · ${about.source}`}
           </Text>
+        </Text>
+      )
+      const entryNote = about?.note && (
+        <Text dimColor wrap="wrap">
+          {about.note}
         </Text>
       )
 
@@ -2344,11 +2410,12 @@ export const register: Register = on => {
         void $.ui.toast(note)
       }
 
-      const liveCards = live.map(a =>
+      const labels = cardLabels(live.map(a => a.description), 8)
+      const liveCards = live.map((a, i) =>
         card({
           key: `agent-${a.id}`,
           art: artOf(byType(a.type), a.type),
-          name: a.description,
+          name: labels[i],
           sub:
             halts[a.id] && !ENDED.has(a.status)
               ? halts[a.id] === 'pending' ? 'stopping' : 'stopped'
@@ -2428,10 +2495,10 @@ export const register: Register = on => {
                 <Text color="claude" inverse={lit('ans-prompt')}>[Enter] put in prompt</Text>
               </Button>
               <Button key="ans-copy" hotkey={keyed('c')} plain onPress={press => void copyAnswer(agentOf, press.surface)}>
-                <Text dimColor inverse={lit('ans-copy')}>[c] copy</Text>
+                <Text dimColor inverse={lit('ans-copy')}>copy</Text>
               </Button>
               <Button key="ans-close" hotkey={keyed('x')} plain onPress={() => void arm($, null)}>
-                <Text dimColor>[x] close</Text>
+                <Text dimColor>close</Text>
               </Button>
             </Box>
           </Box>
@@ -2439,11 +2506,13 @@ export const register: Register = on => {
       }
 
       const f = focused ?? ''
+      const focusedLink = entries.find(d => `card-${d.id}` === f)?.link
       if (arming?.kind === 'message') hint = 'Type, then Enter sends · empty Enter cancels'
       else if (arming?.kind === 'result') hint = 'Enter puts the answer in the prompt · c copy · x close'
       else if (arming?.kind === 'stop') hint = 'Enter on Keep (or x) keeps it · Tab to Stop, Enter stops it'
       else if (f === LAUNCH) hint = `Type the task for ${chosen?.name ?? 'the target'}, Enter ${chosen?.fill ? 'fills the prompt' : 'launches'}`
       else if (f === FILTER) hint = 'Type to filter the dex by name · Tab to the cards'
+      else if (focusedLink) hint = `Enter: open ${focusedLink.title} in your browser · Tab/arrows: next card`
       else if (f.startsWith('card-')) hint = 'Enter: make it the launch target (type the task) · Tab/arrows: next card'
       else if (stopKeyOn) hint = 'Enter: message it · x: stop it (asks Stop / Keep first)'
       else if (f.startsWith('agent-')) hint = 'Enter: message it (running) or read its answer (finished)'
@@ -2502,8 +2571,13 @@ export const register: Register = on => {
         <Text dimColor>No agent matches this filter.</Text>
       )
       const liveGrid = live.length > 0 && (
-        <Box flexDirection="row" flexWrap="wrap">
-          {liveCards}
+        <Box flexDirection="column">
+          <Box flexDirection="row" flexWrap="wrap">
+            {liveCards}
+          </Box>
+          {liveCut > 0 && (
+            <Text key="live-more" dimColor wrap="truncate-end">{`+${liveCut} older agent${liveCut === 1 ? '' : 's'}: Table (t) lists all`}</Text>
+          )}
         </Box>
       )
       const recentRows =
@@ -2569,6 +2643,7 @@ export const register: Register = on => {
           {nudgeLine}
           {launchBox}
           {entry}
+          {entryNote}
           {chips}
           {grid}
           {action}
@@ -2585,6 +2660,7 @@ export const register: Register = on => {
             <Box flexDirection="column">
               {launchBox}
               {entry}
+              {entryNote}
             </Box>,
           )}
           {panel(

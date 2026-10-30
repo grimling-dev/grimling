@@ -4,6 +4,30 @@ All notable changes to Grimling are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2026-10-29
+
+### Added
+
+- **Workflows card** linking to the Claude Workflow Library
+  (https://www.claudeworkflows.org/), a community index of Claude workflows
+  run by the r/ClaudeAI moderators. Enter opens it in your browser
+  (with no browser, the link is copied). It never launches an agent or fills
+  the prompt, and Grimling only links to the library: unofficial, not
+  affiliated. Hide it with `cards.hide: ["workflows"]`.
+
+### Fixed
+
+- **Live card counts.** The deck shows up to 12 live cards (6 inline); past
+  that, a dim `+N older agents` line counts the rest, so the footer totals
+  match what you see. The Table tab still lists every agent.
+- **Live card labels.** Labels skip filler words ("the", "give",
+  "Grimling"), so "Give the Grimling landing page" reads `landing…`, and
+  cards that would still read alike get a number (`Build… 1`, `Build… 2`).
+- **Answer box keys.** The box read `c: [c] copy` and `x: [x] close`; it
+  now reads `c: copy` and `x: close`.
+
 ## [0.1.0] - 2026-10-29
 
 First public release. Grimling is an unofficial community mod for Claude Code:

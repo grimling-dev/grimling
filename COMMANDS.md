@@ -19,9 +19,10 @@ Launch an agent:
 - or Tab straight to the launch box and type: it launches the current target
 - if the spawn is refused, the task stays in the launch box to retry
 - template cards (Swarm, and any in `templates.enabled`) add the filled-in request after your prompt draft instead; press Esc, then Enter to send. A project's template is marked `proj`: read it before sending
+- the Workflows card (`Lore`) is a link: `Enter` (or a click, or its number) opens the Claude Workflow Library (https://www.claudeworkflows.org/) in your browser; with no browser the link is copied. It never launches an agent or fills the prompt. The library is a community index run by the r/ClaudeAI moderators; Grimling only links to it (unofficial, not affiliated)
 
 Grimoire (the cards):
-- built-ins: Scout (Explore), Builder (general-purpose), Planner (Plan), Fetcher (web-fetch), Guide (claude-code-guide); then the template cards (Swarm by default)
+- built-ins: Scout (Explore), Builder (general-purpose), Planner (Plan), Fetcher (web-fetch), Guide (claude-code-guide), and the Workflows link card; then the template cards (Swarm by default)
 - agent cards, an earlier source winning a shared name: the mod's own agents (`grimling:<name>`), each pack in `cards.packs` (`<ns>:<name>`), the project's `.claude/agents`, then `~/.claude/agents`; card ids are `agent-<name>` whatever the pack, so a recent run follows its agent to another pack; ones without art get a generated pixel creature
 - category chips: All, Code, Research, Web, Ops, Swarm, Custom (Enter on a chip); `/` box filters by name
 - card names, short names (6 characters), purpose (40), categories and art (8 rows of 8 pixels) come from dex.json: the mod's `agents/dex.json`, each pack's, then `~/.claude/grimling/dex.json`, the later winning; a key is `<name>` or `<ns>:<name>`; bad art is a settings problem and the card gets a creature
@@ -32,7 +33,7 @@ Meter (under the tabs, every view): your status line as bars. `ctx` context wind
 
 Layout: built for a narrow docked pane (about 44 columns); card labels are short (Build, Plan, Fetch) so they fit beside their number; Mermaid, Help and the counters sit on the bottom row; the status line only shows when agents are running or failed.
 
-Live agents (the cards under "agents"):
+Live agents (the cards under "agents"): a running card shows how long it has run, a finished card the tokens it used (in + out, e.g. `● 358.3k`). Labels skip filler words, and cards that would read alike get a number. Up to 12 cards show (6 inline); a dim `+N older agents` line counts the rest, which the Table tab lists.
 - `Enter` on a running agent    type a message, `Enter` sends it to that agent
 - `Enter` on a finished agent   shows its answer: `Enter` adds it after your prompt draft, `c` copies, `x` closes (answers over 8,000 characters are cut and marked "truncated"; if the prompt cannot take it, a toast says so and the view stays open)
 - `x` (or the STOP button) on a running agent the deck launched   stop it. A Stop / Keep confirm opens with Keep under the ring (`Enter` or `x` keeps it; Tab to Stop, `Enter` stops it). Grimling only stops an agent when you confirm. The stop goes through Claude Code's permission check (TaskStop), so Claude Code may ask too. On success: a toast, Grim's line and a `"kind":"stop"` row in the run log; the card says `stopped` until the engine drops it. If it is refused or fails: a "Not stopped: <reason>" toast and STOP stays to try again. Agents the model started (and workflow agents, which have no card) get no STOP. `stop.enabled: false` hides it
@@ -61,7 +62,7 @@ Settings (`~/.claude/grimling/settings.json`, optional; checked every 30 s and r
 - `feedback.repo` ("grimling-dev/grimling"), `feedback.nudge` (true)
 - `stop.enabled` (true): the STOP button and `x` on running cards the deck launched; false hides them
 - `meter.sessionsFile` (null): a file holding `{"n": 3}`, shown as "3 sessions" in the meter
-- `cards.builtins` / `pack` / `user` / `project` (true) switch each card source; `cards.packs` ([{"path", "ns"?}]: a folder with `agents/`, optional `agents/dex.json` and `templates/`; `ns` defaults to its `.claude-plugin/plugin.json` name; enable the folder as a plugin too, or its cards cannot start); `cards.hide` (card ids or agent types)
+- `cards.builtins` / `pack` / `user` / `project` (true) switch each card source; `cards.packs` ([{"path", "ns"?}]: a folder with `agents/`, optional `agents/dex.json` and `templates/`; `ns` defaults to its `.claude-plugin/plugin.json` name; enable the folder as a plugin too, or its cards cannot start); `cards.hide` (card ids or agent types; `["workflows"]` hides the Workflows card)
 - `templates.enabled` (["swarm"]): template ids that get a card; `<id>.md` is looked up in the mod's `templates/`, each pack's `templates/`, `~/.claude/grimling/templates/` and the project's `.claude/grimling/templates/`, the last found winning; frontmatter `id, name, short, cat, what, art`, body with `{task}` `{cwd}` `{date}`; `examples/templates/gpu-swarm.md` is a cloud GPU example to copy
 - `agentDex` is checked but not used yet
 - a project's `.claude/grimling.json` may set only `cards` and `templates` (a cloned repo is not trusted with the log, the Arena puzzles file or anything else)

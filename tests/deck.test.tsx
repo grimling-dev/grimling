@@ -196,6 +196,93 @@ test('the Swarm card only fills the prompt, with a default text that names no pa
   await ui.unmount()
 })
 
+// The Workflows card only links: it opens the page in the browser and never
+// spawns an agent or touches the prompt.
+function linkStubs(on: On, opts: { open: boolean; files?: Record<string, string> }) {
+  const seen = {
+    ...stubs(on, opts.files ?? {}),
+    runs: [] as string[][],
+    copies: [] as string[],
+    fills: 0,
+    spawns: 0,
+  }
+  on('agent.list', () => ({ value: [] }))
+  on('agent.spawn', () => {
+    seen.spawns += 1
+    return { model: 'test', agentId: 'x' }
+  })
+  on('prompt.fill', () => {
+    seen.fills += 1
+    return { isFilled: true }
+  })
+  on('ui.copy', (_, e) => {
+    seen.copies.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('process.run', (_, e) => {
+    seen.runs.push([...e.argv])
+    const exitCode = opts.open ? 0 : 1
+    return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  return seen
+}
+
+test('the Workflows card is in the dex by default and opens the Claude Workflow Library, nothing else', async ($, on) => {
+  const seen = linkStubs(on, { open: true })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await settle(ui)
+  expect(await ui.find({ type: 'Button', key: 'card-workflows' })).toBeTruthy()
+
+  await ui.press({ key: 'card-workflows' })
+  await settle(ui)
+  expect(seen.runs).toHaveLength(1)
+  expect(seen.runs[0]?.at(-1)).toBe('https://www.claudeworkflows.org/')
+  expect(seen.toasts.join('\n')).toContain('Opened the Claude Workflow Library in your browser')
+  expect(seen.spawns).toBe(0)
+  expect(seen.fills).toBe(0)
+  expect(seen.copies).toHaveLength(0)
+  // With the ring on it, the dex entry says whose library it is and that it is only a link.
+  await $.ui.focus(ringTo('card-workflows'))
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /opens in your browser/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /r\/ClaudeAI moderators\. Unofficial, not affiliated: Grimling only links to it/ })).toBeTruthy()
+
+  // It never became the launch target: the launch box still starts Builder.
+  await ui.input({ key: 'launch-input', text: 'tidy the tests', kind: 'submit' })
+  expect(seen.spawns).toBe(1)
+  expect(seen.runs).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('with no browser the Workflows card copies the link and says so', async ($, on) => {
+  const seen = linkStubs(on, { open: false })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await settle(ui)
+  await ui.press({ key: 'card-workflows' })
+  await settle(ui)
+
+  expect(seen.copies).toEqual(['https://www.claudeworkflows.org/'])
+  expect(seen.toasts.join('\n')).toContain('Could not open the browser: the link to the Claude Workflow Library is copied')
+  expect(seen.spawns).toBe(0)
+  expect(seen.fills).toBe(0)
+  await ui.unmount()
+})
+
+test('cards.hide ["workflows"] leaves the Workflows card out', async ($, on) => {
+  linkStubs(on, { open: true, files: { [`${HOME}/.claude/grimling/settings.json`]: '{"cards": {"hide": ["workflows"]}}' } })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await settle(ui)
+  expect(await ui.find({ type: 'Button', key: 'card-workflows' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'card-scout' })).toBeTruthy()
+  await ui.unmount()
+})
+
 test('a short docked pane cuts Grimoire rows, never the tab bar (B4)', async ($, on) => {
   stubs(on)
   on('agent.list', () => ({
@@ -1238,5 +1325,51 @@ test('stop: stop.enabled false hides STOP', async ($, on) => {
   await settle(ui)
   expect(await ui.find({ type: 'Button', key: 'agent-a1' })).toBeTruthy()
   expect(await ui.find({ type: 'Button', key: 'stop-a1' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('live cards past the cap are counted under the deck (S1)', async ($, on) => {
+  stubs(on)
+  const many = Array.from({ length: 14 }, (_, i) => ({ id: `ag${i}`, description: `task ${i}`, type: 'Explore', status: 'completed' }))
+  on('agent.list', () => ({ value: many }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await settle(ui)
+  expect(await ui.find({ type: 'Button', key: 'agent-ag13' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'agent-ag1' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\+2 older agents: Table \(t\) lists all/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('live card labels skip filler words and number look-alikes (S4)', async ($, on) => {
+  stubs(on)
+  on('agent.list', () => ({
+    value: [
+      { id: 'ag1', description: 'Give the Grimling landing page a pass', type: 'Explore', status: 'running' },
+      { id: 'ag2', description: 'Build the landing page', type: 'general-purpose', status: 'completed' },
+      { id: 'ag3', description: 'Build the landing site', type: 'general-purpose', status: 'completed' },
+    ],
+  }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await settle(ui)
+  expect(await ui.find({ type: 'Text', text: 'landing…' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Build… 1' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Build… 2' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /Give th/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the answer box labels its keys once: copy and close, no [c] or [x] (S2)', async ($, on) => {
+  stubs(on)
+  on('agent.list', () => ({ value: [{ id: 'ag1', description: 'scan repo', type: 'Explore', status: 'completed' }] }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't1', agentId: 'ag1', reason: 'answer', category: null, explanation: null })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'agent-ag1' })
+  expect(await ui.find({ type: 'Text', text: 'copy' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'close' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /\[c\]|\[x\]/ })).toBeUndefined()
   await ui.unmount()
 })

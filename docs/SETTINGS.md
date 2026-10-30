@@ -88,12 +88,12 @@ Which cards the Grimoire shows. A project file may set these.
 
 | Key | Default | Allowed | What it does |
 |---|---|---|---|
-| `cards.builtins` | `true` | `true`, `false` | The built-in cards: Scout, Builder, Planner, Fetcher and Guide. |
+| `cards.builtins` | `true` | `true`, `false` | The built-in cards: Scout, Builder, Planner, Fetcher, Guide and the Workflows link card. |
 | `cards.pack` | `true` | `true`, `false` | The agents the mod ships, run as `grimling:<name>`. |
 | `cards.user` | `true` | `true`, `false` | Agent files in `~/.claude/agents`. |
 | `cards.project` | `true` | `true`, `false` | The project's `.claude/agents` and `.claude/grimling/templates`. |
 | `cards.packs` | `[]` | up to 20 entries of `{ "path": "...", "ns": "..." }` | Extra agent packs. `ns` is optional. See [PACKS.md](PACKS.md). |
-| `cards.hide` | `[]` | card ids or agent types, each at most 100 characters | Cards to leave out, such as `"scout"`, `"swarm"`, `"agent-research-scout"` or `"grimling:research-scout"`. |
+| `cards.hide` | `[]` | card ids or agent types, each at most 100 characters | Cards to leave out, such as `"scout"`, `"swarm"`, `"workflows"` (the Workflows card, a link to the community Claude Workflow Library), `"agent-research-scout"` or `"grimling:research-scout"`. |
 
 ### templates
 
